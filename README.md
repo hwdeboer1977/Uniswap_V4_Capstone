@@ -1,66 +1,74 @@
-## Foundry
+# Whitepaper: Decentralized Sports Betting Hook on Uniswap V4
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## Abstract
 
-Foundry consists of:
+This whitepaper introduces a decentralized sports betting mechanism integrated as a custom Uniswap V4 Hook, utilizing the Logarithmic Market Scoring Rule (LMSR) for dynamic probability-weighted pricing. Users place bets on sports outcomes using USDC, which is subsequently routed into a USDC/USDT liquidity pool to optimize capital efficiency. This system ensures continuous price discovery, fair odds, and efficient liquidity utilization within the DeFi ecosystem.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+## 1. Introduction
 
-## Documentation
+Traditional sports betting platforms rely on centralized intermediaries, leading to issues such as manipulated odds, lack of transparency, and counterparty risks. This proposal leverages Uniswap V4 Hooks to create an automated and decentralized sports betting mechanism that maintains fair pricing through LMSR, while simultaneously generating yield by providing liquidity to a stablecoin (USDC/USDT) pool.
 
-https://book.getfoundry.sh/
+## 2. System Architecture
 
-## Usage
+### 2.1. Components
 
-### Build
+- Uniswap V4 Hook: A smart contract that dynamically adjusts bet pricing and deposits funds into an LP.
+- LMSR-Based Market Maker: Ensures that the price of each bet reflects its implied probability.
+- USDC/USDT Pool: Stores betting funds as liquidity, generating trading fees until needed for payouts.
+- Automated Liquidity Routing: Redirects user deposits into the LP and withdraws when payouts are required.
 
-```shell
-$ forge build
-```
+### 2.2. Workflow
 
-### Test
+- Users place bets by swapping USDC for outcome shares (e.g., WIN, DRAW, LOSE).
+- LMSR updates pricing dynamically, ensuring probability-adjusted odds.
+- USDC from bets is automatically deposited into the USDC/USDT liquidity pool to optimize capital efficiency.
+- Upon event resolution, liquidity is partially withdrawn to pay winners.
 
-```shell
-$ forge test
-```
+### 3. LMSR Pricing Mechanism
 
-### Format
+The Logarithmic Market Scoring Rule (LMSR) defines a cost function:
 
-```shell
-$ forge fmt
-```
+#### $C(q) = b · log(\sum e^{q_i / b} ) $
 
-### Gas Snapshots
+Where:
 
-```shell
-$ forge snapshot
-```
+- $C(q) = $ total cost to buy outcome shares,
 
-### Anvil
+- $b = $ liquidity parameter (higher reduces price impact),
 
-```shell
-$ anvil
-```
+- $q_i = $ quantity of shares held for outcome .
 
-### Deploy
+The price for each outcome is:
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
+### $P_i = \frac{e^{q_i / b}}{\sum e^{q_j / b}} $
 
-### Cast
+This ensures that probabilities remain dynamic, updating as users place bets.
 
-```shell
-$ cast <subcommand>
-```
+### 4. Uniswap V4 Hook Integration
 
-### Help
+#### 4.1. beforeSwap(): Dynamic Pricing Adjustments
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+Prior to swap execution, LMSR pricing is applied to modify the bet price.
+PM
+
+#### 4.2 afterSwap(): Liquidity Routing to Stablecoin Pool
+
+After a bet is placed, USDC is deposited into the USDC/USDT LP.
+PM
+
+#### 4.3 afterRemoveLiquidity(): Payout Processing
+
+Upon event resolution, liquidity is withdrawn to pay winners.
+PM
+
+### 5. Advantages of the System
+
+- ✅ Decentralized & Transparent – Eliminates centralized sportsbooks.
+- ✅ Fair & Dynamic Pricing – LMSR ensures odds reflect probability.
+- ✅ Capital Efficiency – Bets fund liquidity pools instead of sitting idle.
+- ✅ Automated Payouts – Smart contracts handle settlement trustlessly.
+- ✅ Passive Yield Generation – Betting funds earn fees via Uniswap LP.
+
+### 6. Conclusion
+
+This Uniswap V4 Hook enables a trustless, transparent, and capital-efficient sports betting mechanism. By leveraging LMSR for pricing and Uniswap LPs for liquidity routing, it creates a self-sustaining betting ecosystem where funds remain productive while awaiting event resolution. Future enhancements include expanding to more betting markets, multi-token support, and dynamic liquidity incentives.
