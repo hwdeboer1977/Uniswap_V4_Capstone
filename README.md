@@ -32,11 +32,11 @@ The Logarithmic Market Scoring Rule (LMSR) defines a cost function:
 
 Where:
 
-- $C(q) = $ total cost to buy outcome shares,
+- $C(q)=$ total cost to buy outcome shares,
 
-- $b = $ liquidity parameter (higher reduces price impact),
+- $b=$ liquidity parameter (higher reduces price impact),
 
-- $q_i = $ quantity of shares held for outcome .
+- $q_i=$ quantity of shares held for outcome .
 
 The price for each outcome is:
 
