@@ -2,108 +2,116 @@
 pragma solidity ^0.8.0;
 
 import {Test} from "forge-std/Test.sol";
-
-import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
-
 import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
-import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
-import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
-
-
-
+import {IAllowanceTransfer} from "permit2/src/interfaces/IAllowanceTransfer.sol";
 import {PoolManager} from "v4-core/PoolManager.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
-
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {SqrtPriceMath} from "v4-core/libraries/SqrtPriceMath.sol";
 import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol";
-
+import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import "forge-std/console.sol";
 import {SportsBetting} from "../src/SportsBetting.sol";
-
-//import { UniversalRouter } from "@uniswap/universal-router/contracts/UniversalRouter.sol";
-//import { IPermit2 } from "@uniswap/permit2/src/interfaces/IPermit2.sol";
-// /home/lupo1977/capstone/lib/v4-periphery/lib/permit2/src/interfaces/IPermit2.sol
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
-// /home/lupo1977/capstone/lib/v4-periphery/lib/v4-core/src/types/PoolKey.sol
+import {IWETH9} from "v4-periphery/src/interfaces/external/IWETH9.sol";
+import {PositionManager} from "v4-periphery/src/PositionManager.sol";
+import {PosmTestSetup} from "v4-periphery/test/shared/PosmTestSetup.sol";
+import {Deploy, IPositionDescriptor} from "v4-periphery/test/shared/Deploy.sol";
+import {PositionDescriptor} from "lib/v4-periphery/src/PositionDescriptor.sol";
+import {Actions} from "v4-periphery/src/libraries/Actions.sol";
 
-contract TestSportsBetting is Test, Deployers {
+contract TestSportsBetting is Test, Deployers, PosmTestSetup  {
      using CurrencyLibrary for Currency;
 
-//     UniversalRouter public immutable router;
-
     uint256 public storedBetCost; // State variable to store bet cost
-    MockERC20 token0;
-    MockERC20 token1;
+    MockERC20 tokenUsdc;
+    MockERC20 tokenUsdt;
 
-    Currency token0Currency;
-    Currency token1Currency;
+    PoolId poolId;
+    uint256 tokenId;
+    Currency tokenUsdcCurrency;
+    Currency tokenUsdtCurrency;
+    address owner = address(this);
 
-    SportsBetting hook;
+
+    // Sportsbetting hook
+    SportsBetting sportsBettingHook;
+    bytes hookData = abi.encode(address(this));
+
+	// PositionManager NFT
+	IPositionManager posm;
+    PoolKey poolKey;
 
     function setUp() public {
-        // Step 1 + 2
+        
         // Deploy PoolManager and Router contracts
         deployFreshManagerAndRouters();
+    
+        // Deploy an instance of PositionManager
+	    deployPosm(manager);
+        //posm = lpm;
+
+    
+
 
         // Create 2 ERC-20 test tokens
-        token0 = new MockERC20("Test Token 0", "TEST0", 18);
-        token1 = new MockERC20("Test Token 1", "TEST1", 18);
-        token0Currency = Currency.wrap(address(token0));
-        token1Currency = Currency.wrap(address(token1));
-        console.log("Address token 0: ", address(token0));
-        console.log("Address token 1: ", address(token1));
+        tokenUsdc = new MockERC20("Test Token 0", "TEST0", 18);
+        tokenUsdt = new MockERC20("Test Token 1", "TEST1", 18);
+        tokenUsdcCurrency = Currency.wrap(address(tokenUsdc));
+        tokenUsdtCurrency = Currency.wrap(address(tokenUsdt));
+        console.log("Address token 0: ", address(tokenUsdc));
+        console.log("Address token 1: ", address(tokenUsdt));
 
         // Mint a bunch of TOKEN to ourselves and to address(1)
-        token0.mint(address(this), 1000 ether);
-        token0.mint(address(1), 1000 ether);
-        token1.mint(address(this), 1000 ether);
-        token1.mint(address(1), 1000 ether);
+        tokenUsdc.mint(address(this), 1000 ether);
+        tokenUsdc.mint(address(1), 1000 ether);
+        tokenUsdt.mint(address(this), 1000 ether);
+        tokenUsdt.mint(address(1), 1000 ether);
         console.log("Tokens 0 and 1 has been minted!");
+
+        tokenUsdc.approve(address(this), type(uint256).max);
+        tokenUsdt.approve(address(this), type(uint256).max);
+
+        approvePosmCurrency(tokenUsdcCurrency);
+        approvePosmCurrency(tokenUsdtCurrency);
 
         // Deploy hook to an address that has the proper flags set
         uint160 flags = uint160(
-            Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG 
+            Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG 
         );
         deployCodeTo(
             "SportsBetting.sol",
-            abi.encode(manager, token0, token1, "Points Token", "TEST_POINTS"),
+             //abi.encode(manager, tokenUsdc, tokenUsdt, "Points Token", "TEST_POINTS"),
+             abi.encode(manager, address(this), 10, lpm, tokenUsdc, tokenUsdt, "Points Token", "TEST_POINTS"),
             address(flags)
         );
 
 
+          
+
         // Deploy our hook
-        hook = SportsBetting(address(flags));
+        sportsBettingHook = SportsBetting(address(flags));
+        
 
-        // Place bet in our hook
-        // hook.placeBet(SportsBetting.Outcome.LIV_WINS, 100);
-        // console.log(hook.betCost());
-    
-        // hook.placeBet(SportsBetting.Outcome.LIV_WINS, 20);
-        // console.log("totalLiquidity:", hook.totalLiquidity());
-        // console.log("Bet cost calculated by LMSR:", hook.initialCost(), "USDC");
 
- 
-
-        // Approve our TOKEN for spending on the swap router and modify liquidity router
-        // These variables are coming from the `Deployers` contract
-        token0.approve(address(swapRouter), type(uint256).max);
-        token0.approve(address(modifyLiquidityRouter), type(uint256).max);
-        token1.approve(address(swapRouter), type(uint256).max);
-        token1.approve(address(modifyLiquidityRouter), type(uint256).max);
-
+        // // Create the pool
+        poolKey  = PoolKey(tokenUsdtCurrency, tokenUsdcCurrency, 3000, 60, IHooks(sportsBettingHook));
+        
         
         (key, ) = initPool(
-            token0Currency, // Currency 0 = ETH
-            token1Currency, // Currency 1 = TOKEN
-            hook, // Hook Contract
-            3000, // Swap Fees
-            SQRT_PRICE_1_1 // Initial Sqrt(P) value = 1
-        );
+			tokenUsdtCurrency,
+			tokenUsdcCurrency,
+			sportsBettingHook, 
+			3000,
+			SQRT_PRICE_1_1
+		);
+        
+
     }
 
      function testPlaceBet() public {
@@ -111,19 +119,24 @@ contract TestSportsBetting is Test, Deployers {
             //uint256 amountIn = 20; // 20 USDC
 
             // Approve the contract to spend USDC
-            token0.approve(address(hook), amountIn);
+            tokenUsdc.approve(address(sportsBettingHook), amountIn);
 
-            console.log("Approved USDC for betting contract");
+            // console.log("Approved USDC for betting contract");
+            // console.log("Who is sending the LP:" , msg.sender);
+            // console.log("Address SwapRouter:", address(swapRouter));
+            // console.log("Address modifyLiquidityRouter:", address(modifyLiquidityRouter));
+
 
             // Call placeBet()
-             hook.placeBet(SportsBetting.Outcome.LIV_WINS, amountIn);
+            sportsBettingHook.placeBet(SportsBetting.Outcome.LIV_WINS, amountIn);
             
-             console.log("Bet amount:", hook.betAmount());
-              console.log("Initial cost:", hook.initialCost());   
-                 console.log("New liquidity:", hook.newLiquidity());   
-                 console.log("New cost:", hook.newCost());   
+            console.log("Bet amount:", sportsBettingHook.betAmount());
+            console.log("Initial cost:", sportsBettingHook.initialCost());   
+            console.log("New liquidity:", sportsBettingHook.newLiquidity());   
+            console.log("New cost:", sportsBettingHook.newCost());   
+            
             // Retrieve bet cost from public state variable
-            storedBetCost = hook.betCost();
+            storedBetCost = sportsBettingHook.betCost();
 
             // Log bet cost
             console.log("Bet cost calculated by LMSR:", storedBetCost, "USDC");
@@ -131,197 +144,112 @@ contract TestSportsBetting is Test, Deployers {
             // Assertions to ensure `betCost` updated correctly
             assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
 
-            uint256 amountToSwap = storedBetCost/2;
-
-            // Swap `amountToSwap` from token0 to token1 (USDC to the betting token)
-            afterSwap(amountToSwap);
-
 
         }
 
 
-        // Swap after placing the bet
-        function afterSwap(uint256 amountToSwap) internal {
-            console.log("Swapping", amountToSwap, "USDC for token1...");
+        // Add liquidity after user places bet
+        function test_AddRemoveLiquidity() public {
 
-            // Approve the Uniswap router to spend token0
-             token0.approve(address(swapRouter), type(uint256).max);
+            // First we add liquidity
+            console.log("Adding Liquidity", "USDC and USDT...");
+        
+            bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+            bytes[] memory params = new bytes[](2);
 
-            // // Execute swap
-            // swapRouter.swapExactInputSingle(
-            //     amountToSwap,
-            //     1, // Min amountOut (use 1 for testing, should use slippage protection in production)
-            //     address(token0), // Token In
-            //     address(token1), // Token Out
-            //     block.timestamp + 5 minutes
-            // );
+            uint256 balanceToken0BeforeThis = tokenUsdt.balanceOf(address(this));
+            uint256 balanceToken1BeforeThis = tokenUsdc.balanceOf(address(this));
+            console.log("balanceToken0BeforeThis:", balanceToken0BeforeThis);
+             console.log("balanceToken1BeforeThis:", balanceToken1BeforeThis);
 
-            // Now we swap
-            // We will swap 0.001 ether for tokens
-            // We should get 20% of 0.001 * 10**18 points
-            // = 2 * 10**14
+            int24 tickLower = -60;
+            int24 tickUpper = 60;
+            uint128 amountToAdd = 1 ether;
+            uint128 amount0Max = amountToAdd;
+            uint128 amount1Max = 10000000000000000000;
+            uint160 sqrtPriceAtTickLower = TickMath.getSqrtPriceAtTick(-60);
+            uint256 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(
+                sqrtPriceAtTickLower,
+                SQRT_PRICE_1_1,
+                amountToAdd
+            );
+            uint256 deadline = block.timestamp + 60;
+           uint256 valueToPass = 0; // We are not sending ETH
 
-            // Set user address in hook data
-            bytes memory hookData = abi.encode(address(this));
-            //bytes memory hookData = abi.encode(address(hook));
+            
 
-            console.log("Address this: ", address(this));
-            console.log("Address hook: ", address(hook));
-
-            console.log("Balance address this:" , token0.balanceOf(address(this)));
-            console.log("Balance hook:" , token0.balanceOf(address(hook)));
-
-            // 2 Challenges remaining
-            // 1. There is no liquidity to Swap
-            // 2. The hook itself receives the funds from the bets
-
-            swapRouter.swap{value: amountToSwap}(
-                key,
-                IPoolManager.SwapParams({
-                    zeroForOne: true,
-                    amountSpecified: -int256(amountToSwap), // Exact input for output swap
-                    sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-                }),
-                PoolSwapTest.TestSettings({
-                    takeClaims: false,
-                    settleUsingBurn: false
-                }),
+            // owner = recipient of minted position
+            params[0] = abi.encode(
+                poolKey,
+                tickLower,
+                tickUpper,
+                liquidityDelta,
+                amount0Max,
+                amount1Max,
+                owner, 
                 hookData
             );
-            // // Verify the swap was successful
-            // uint256 balanceAfter = token1.balanceOf(address(this));
-            // assertGt(balanceAfter, 0, "Swap did not increase token1 balance");
 
-            // console.log("Swap successful! New token1 balance:", balanceAfter);
+            params[1] = abi.encode(tokenUsdtCurrency, tokenUsdcCurrency);
+
+            lpm.modifyLiquidities{value: valueToPass}(
+                abi.encode(actions, params),
+                deadline
+            );
+
+            //console.log("TokenID:" , lpm.positionInfo(1));
+
+            uint128 currentLiquidity = lpm.getPositionLiquidity(1);
+            console.log("currentLiquidity:", currentLiquidity);
+
+
+
+            uint256 balanceToken0AfterThis = tokenUsdt.balanceOf(address(this));
+            uint256 balanceToken1AfterThis = tokenUsdc.balanceOf(address(this));
+            console.log("balanceToken0AfterThis:", balanceToken0AfterThis);
+            console.log("balanceToken1AfterThis:", balanceToken1AfterThis);
+
+            uint256 myLiquidity = lpm.getPositionLiquidity(1);
+            console.log("myLiquidity:", myLiquidity);
+
+            // Then we test the removal of its liquidity
+            console.log("Removing Liquidity", "USDC and USDT...");
+
+            bytes memory actions2 = abi.encodePacked(uint8(Actions.DECREASE_LIQUIDITY), uint8(Actions.TAKE_PAIR));
+            bytes[] memory params2 = new bytes[](2);
+
+          
+              
+            // Roll to end of match
+            vm.roll(block.number + 10); // Move forward 10 blocks
+            console.log("Block number: ", block.number);
+
+            
+            uint256 amount0Min = 0;
+            uint256 amount1Min = 0;
+            uint256 liquidity = myLiquidity;
+            
+            params2[0] = abi.encode(1, liquidity, amount0Min, amount1Min, hookData);
+
+          
+            params2[1] = abi.encode(tokenUsdtCurrency, tokenUsdcCurrency, address(this));
+
+            uint256 deadline2 = block.timestamp + 60;
+
+            uint256 valueToPass2 =  0;
+
+            lpm.modifyLiquidities{value: valueToPass2}(
+                abi.encode(actions2, params2),
+                deadline2
+            );
+
+            uint256 balanceToken0FinalThis = tokenUsdt.balanceOf(address(this));
+            uint256 balanceToken1FinalThis = tokenUsdc.balanceOf(address(this));
+            console.log("balanceToken0FinalThis:", balanceToken0FinalThis);
+            console.log("balanceToken1FinalThis:", balanceToken1FinalThis);
+
+ 
         }
 
 
-//         // Uniswap Swap Function
-//         function swapOnUniswap(uint256 amountToSwap) internal {
-     
-    
-//             uint128 amountIn = 100 * 1e18;   // Example: Swap 100 USDC
-//             uint128 minAmountOut = 1e16;     // Example: Expected at least 0.01 WETH
-
-//             // Define PoolKey (Uniswap V4 pools)
-//             PoolKey memory key = PoolKey({
-//                 currency0: token0,  // USDC
-//                 currency1: token1,  // WETH
-//                 fee: 500,           // Pool fee: 0.05%
-//                 hook: address(0)    // No hooks
-//             });
-
-//             // Approve UniversalRouter to spend token0
-//             token0.approve(address(router), amountIn);
-
-//             // Encode UniversalRouter commands
-//             bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
-//             // bytesuter Actions
-//             // bytes memory actions = abi.encodePacked(
-//             //     uint8(Actions.SWAP_EXACT_IN_SINGLE),  // Swap action
-//             //     uint8(Actions.SETTLE_ALL),           // Finalize the swap
-//             //     uint8(Actions.TAKE_ALL)              // Take all output tokens
-//             // );
-
-//             // // Prepare swap parameters
-//             // bytes ;
-//             // params[0] = abi.encode(
-//             // Params({
-//             //         poolKey: key,
-//             //         zeroForOne: true,   // true = token0 → token1
-//             //         amountIn: amountIn,
-//             //         amountOutMinimum: minAmountOut,
-//             //         sqrtPriceLimitX96: uint160(0),
-//             //         hookData: bytes("")
-//             //     })
-//             // );
-
-//             // params[1] = abi.encode(key.currency0, amountIn);
-//             // params[2] = abi.encode(key.currency1, minAmountOut);
-
-//             // // Combine actions and params into `inputs`
-//             // inputs[0] = abi.encode(actions, params);
-
-//             // // Execute the swap using UniversalRouter
-//             // router.execute(commands, inputs, block.timestamp + 1 minutes);
-
-//             // // Retrieve the output amount
-//             // uint256 amountOut = IERC20(key.currency1).balanceOf(address(this));
-//             // console.log("Swap output amount:", amountOut);
-
-//             // // Assert that the swap was successful
-//             // require(amountOut >= minAmountOut, "Insufficient output amount");
-//         }
-
-
-//     // function test_addLiquidityAndSwap() public {
-//     //     // uint256 pointsBalanceOriginal = hook.balanceOf(address(this));
-
-//     //     // // Set user address in hook data
-//     //     // bytes memory hookData = abi.encode(address(this));
-
-//     //     // uint160 sqrtPriceAtTickLower = TickMath.getSqrtPriceAtTick(-60);
-//     //     // uint160 sqrtPriceAtTickUpper = TickMath.getSqrtPriceAtTick(60);
-//     //     // console.log("sqrtPriceAtTickLower:", sqrtPriceAtTickLower);
-//     //     // console.log("sqrtPriceAtTickUpper:", sqrtPriceAtTickUpper);
-//     //     // console.log("SQRT_PRICE_1_1:", SQRT_PRICE_1_1);
-
-//     //     // uint256 ethToAdd = 1 ether;
-//     //     // uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(
-//     //     //     sqrtPriceAtTickLower,
-//     //     //     SQRT_PRICE_1_1,
-//     //     //     ethToAdd
-//     //     // );
-//     //     // console.log("Decimals for token0:", token0.decimals());
-//     //     // console.log("Decimals for token1:", token1.decimals());
-//     //     // console.log("liquidityDelta:", liquidityDelta);
-
-//     //     // uint256 tokenToAdd = LiquidityAmounts.getAmount1ForLiquidity(
-//     //     //     sqrtPriceAtTickUpper,
-//     //     //     SQRT_PRICE_1_1,
-//     //     //     liquidityDelta
-//     //     // );
-//     //     // console.log("tokenToAdd:", tokenToAdd);
-
-//     //     // modifyLiquidityRouter.modifyLiquidity{value: ethToAdd}(
-//     //     //     key,
-//     //     //     IPoolManager.ModifyLiquidityParams({
-//     //     //         tickLower: -60,
-//     //     //         tickUpper: 60,
-//     //     //         liquidityDelta: int256(uint256(liquidityDelta)),
-//     //     //         salt: bytes32(0)
-//     //     //     }),
-//     //     //     hookData
-//     //     // );
-//     //     // uint256 pointsBalanceAfterAddLiquidity = hook.balanceOf(address(this));
-
-//     //     // assertApproxEqAbs(
-//     //     //     pointsBalanceAfterAddLiquidity - pointsBalanceOriginal,
-//     //     //     0.1 ether,
-//     //     //     0.001 ether // error margin for precision loss
-//     //     // );
-
-//     //     // Now we swap
-//     //     // We will swap 0.001 ether for tokens
-//     //     // We should get 20% of 0.001 * 10**18 points
-//     //     // = 2 * 10**14
-//     //     // swapRouter.swap{value: 0.001 ether}(
-//     //     //     key,
-//     //     //     IPoolManager.SwapParams({
-//     //     //         zeroForOne: true,
-//     //     //         amountSpecified: -0.001 ether, // Exact input for output swap
-//     //     //         sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-//     //     //     }),
-//     //     //     PoolSwapTest.TestSettings({
-//     //     //         takeClaims: false,
-//     //     //         settleUsingBurn: false
-//     //     //     }),
-//     //     //     hookData
-//     //     // );
-//     //     // uint256 pointsBalanceAfterSwap = hook.balanceOf(address(this));
-//     //     // assertEq(
-//     //     //     pointsBalanceAfterSwap - pointsBalanceAfterAddLiquidity,
-//     //     //     2 * 10 ** 14
-//     //     // );
-//     // }
 }

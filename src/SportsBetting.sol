@@ -5,13 +5,13 @@ import "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { UD60x18, ud } from "prb-math/UD60x18.sol";
 import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
 import {ERC20} from "solmate/src/tokens/ERC20.sol";
-
+import {IPositionManager} from "v4-periphery/src/interfaces/IPositionManager.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
-
+import "forge-std/console.sol";
 
 contract SportsBetting is BaseHook, ERC20 {
     IERC20 public usdc;
@@ -26,6 +26,11 @@ contract SportsBetting is BaseHook, ERC20 {
     uint256 public betCost;
     uint256 public betAmount;
 
+    // Address protocolOwner (only one who can add/remove liquidity)
+    address public protocolOwner;
+    uint256 public matchStartTime; // starting time match
+
+    IPositionManager posm;
 
     enum Outcome { LIV_WINS, LIV_DRAW, LIV_LOSE }
 
@@ -41,11 +46,17 @@ contract SportsBetting is BaseHook, ERC20 {
 
     constructor(
         IPoolManager _manager,
+         address _protocolOwner,
+        uint256 _matchStartTime,
+        IPositionManager _posm,
         address _usdc,
         address _usdt,
         string memory _name,
         string memory _symbol
     ) BaseHook(_manager) ERC20(_name, _symbol, 18) {
+        protocolOwner = _protocolOwner;
+        matchStartTime=_matchStartTime;
+        posm = _posm;
         usdc = IERC20(_usdc);
         usdt = IERC20(_usdt);
         liquidity[Outcome.LIV_WINS] = 0;
@@ -55,11 +66,11 @@ contract SportsBetting is BaseHook, ERC20 {
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
-            beforeSwap: true,
+            beforeSwap: false,
             afterSwap: false,
-            beforeAddLiquidity: false,
-            afterAddLiquidity: true,
-            beforeRemoveLiquidity: false,
+            beforeAddLiquidity: true,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: true,
             afterRemoveLiquidity: false,
             beforeInitialize: false,
             afterInitialize: false,
@@ -108,15 +119,73 @@ contract SportsBetting is BaseHook, ERC20 {
     }
 
     
-    function _afterSwap(
-        address,
+    // function _afterSwap(
+    //     address,
+    //     PoolKey calldata key,
+    //     IPoolManager.SwapParams calldata,
+    //     BalanceDelta delta,
+    //     bytes calldata
+    // ) internal override returns (bytes4, int128) {
+    //     return (BaseHook.afterSwap.selector, 0);
+    // }
+
+   //event DebugSender(address sender, address protocolOwner);
+
+    function _beforeAddLiquidity(
+        address sender,
         PoolKey calldata key,
-        IPoolManager.SwapParams calldata,
-        BalanceDelta delta,
-        bytes calldata
-    ) internal override returns (bytes4, int128) {
-        return (BaseHook.afterSwap.selector, 0);
+        IPoolManager.ModifyLiquidityParams calldata params,
+        bytes calldata hookData
+    ) internal override returns (bytes4) {
+        
+        // Log
+        console.log("Sender:", sender); // this is address modifyLiquidityRouter
+        console.log("Protocol Owner:", protocolOwner);
+
+        // Ensure only the protocol can add liquidity
+        //require(sender == protocolOwner, "Only the protocol can provide liquidity");
+
+        // Ensure the match is still open (betting period is active)
+        console.log("Block Timestamp:", block.timestamp);
+        console.log("matchStartTime:", matchStartTime);
+        require(block.timestamp < matchStartTime, "Cannot add liquidity after match starts");
+
+        return BaseHook.beforeAddLiquidity.selector;
     }
+    
+
+    function _beforeRemoveLiquidity(
+        address sender,
+        PoolKey calldata key,
+        IPoolManager.ModifyLiquidityParams calldata params,
+        bytes calldata hookData
+    ) internal override returns (bytes4) {
+        
+        // Log
+        console.log("Sender:", sender); // this is address modifyLiquidityRouter
+        console.log("Protocol Owner:", protocolOwner);
+
+        // Ensure only the protocol can add liquidity
+        //require(sender == protocolOwner, "Only the protocol can provide liquidity");
+
+        // Ensure the match is still open (betting period is active)
+        console.log("Block Timestamp:", block.timestamp);
+        console.log("matchStartTime:", matchStartTime);
+        //require(block.timestamp >= matchStartTime, "Cannot remove liquidity before match ends");
+
+        return BaseHook.beforeRemoveLiquidity.selector;
+    }
+
+    // function _afterAddLiquidity(
+    //     address,
+    //     PoolKey calldata key,
+    //     IPoolManager.ModifyLiquidityParams calldata,
+    //     BalanceDelta delta,
+    //     BalanceDelta,
+    //     bytes calldata hookData
+    // ) internal override onlyPoolManager returns (bytes4, BalanceDelta) {
+    //     return (this.afterAddLiquidity.selector, delta);
+    // }
 
     //function swapUSDCForUSDT_V4(uint256 amountIn) internal returns (uint256 amountOut) {
     //     usdc.approve(address(manager), amountIn);
@@ -131,18 +200,7 @@ contract SportsBetting is BaseHook, ERC20 {
     //     amountOut = uint256(int256(delta.amount1())); // Get received USDT amount
    // }
 
-    // function addLiquidityToUniswap(uint256 usdcAmount, uint256 usdtAmount) internal {
-    //     usdc.approve(address(manager), usdcAmount);
-    //     usdt.approve(address(manager), usdtAmount);
 
-    //     PoolKey memory key = PoolKey({
-    //         currency0: Currency.wrap(address(usdc)),
-    //         currency1: Currency.wrap(address(usdt)),
-    //         fee: 500
-    //     });
-
-    //     manager.modifyPosition(address(this), key, int256(usdcAmount), int256(usdtAmount), "");
-    // }
 
     function getMarketCost() public view returns (uint256) {
         uint256 expSum = this.expScaled(liquidity[Outcome.LIV_WINS]) +
