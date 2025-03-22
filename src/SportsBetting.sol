@@ -94,18 +94,13 @@ contract SportsBetting is BaseHook, ERC20 {
     }
 
 
+    // Function to process the bets
     function placeBet(Outcome _outcome, uint256 _amount) external {
         require(!matchSettled, "Betting is closed");
         require(_amount <= 2000e18, "Bet too large for liquidity");
 
-
-        // uint256 initialCost = getMarketCost();
-        // uint256 newLiquidity = liquidity[_outcome] + _amount;
-        // liquidity[_outcome] = newLiquidity;
-
-        // uint256 newCost = getMarketCost();
-        // uint256 betCost = newCost - initialCost;
-
+        // Calculate cost of bet = newCost - Initial Cost
+        // Use state variables for now
         betAmount = _amount;
         initialCost = getMarketCost();
         newLiquidity = liquidity[_outcome] + _amount;
@@ -133,16 +128,30 @@ contract SportsBetting is BaseHook, ERC20 {
         
     
         require(block.timestamp >= matchStartTime, "Cannot claim prices before match ends");
-        //Outcome winningOutcome = matchResult;
         
-        //uint256 userBet = userBets[winningOutcome][msg.sender];
-        //require(userBet > 0, "No winnings to claim");
+        // Determine the winning outcome
+        Outcome winningOutcome;
+
+        if (outcomeIsWIN) {
+            winningOutcome = Outcome.LIV_WINS;
+        } else if (outcomeIsLOSE) {
+            winningOutcome = Outcome.LIV_LOSE;
+        } else if (outcomeIsDRAW) {
+            winningOutcome = Outcome.LIV_DRAW;
+        } else {
+            revert("No outcome set yet");
+        }
+            
+        uint256 userBet = userBets[winningOutcome][msg.sender];
+        require(userBet > 0, "No winnings to claim");
 
         // Calculate total winnings pool
-        //uint256 totalWinningBets = liquidity[winningOutcome];
+        uint256 totalWinningBets = liquidity[winningOutcome];
 
         // Calculate user share based on their bet proportion
-        //uint256 userShare = (userBet * prizePool) / totalWinningBets;
+        uint256 prizePool = usdc.balanceOf(address(this));
+        uint256 userPrice = (userBet * prizePool) / totalWinningBets;
+        console.log("user Price: ", userPrice);
 
         // Prevent reentrancy
         //userBets[winningOutcome][msg.sender] = 0;
