@@ -30,6 +30,16 @@ contract SportsBetting is BaseHook, ERC20 {
     address public protocolOwner;
     uint256 public matchStartTime; // starting time match
 
+    // Setting for betting market
+    bool public betMarketOpen;
+    bool public betMarketClosed;
+    bool public resolved;
+    bool public outcomeIsWIN;
+    bool public outcomeIsLOSE;
+    bool public outcomeIsDRAW;
+    uint256 public startTime;
+    uint256 public endTime;
+
     IPositionManager posm;
 
     enum Outcome { LIV_WINS, LIV_DRAW, LIV_LOSE }
@@ -119,17 +129,30 @@ contract SportsBetting is BaseHook, ERC20 {
     }
 
     
-    // function _afterSwap(
-    //     address,
-    //     PoolKey calldata key,
-    //     IPoolManager.SwapParams calldata,
-    //     BalanceDelta delta,
-    //     bytes calldata
-    // ) internal override returns (bytes4, int128) {
-    //     return (BaseHook.afterSwap.selector, 0);
-    // }
+    function claimWinnings() external {
+        
+    
+        require(block.timestamp >= matchStartTime, "Cannot claim prices before match ends");
+        //Outcome winningOutcome = matchResult;
+        
+        //uint256 userBet = userBets[winningOutcome][msg.sender];
+        //require(userBet > 0, "No winnings to claim");
 
-   //event DebugSender(address sender, address protocolOwner);
+        // Calculate total winnings pool
+        //uint256 totalWinningBets = liquidity[winningOutcome];
+
+        // Calculate user share based on their bet proportion
+        //uint256 userShare = (userBet * prizePool) / totalWinningBets;
+
+        // Prevent reentrancy
+        //userBets[winningOutcome][msg.sender] = 0;
+
+        // Transfer winnings
+        //require(usdc.transfer(msg.sender, userShare), "USDC transfer failed");
+
+        //emit WinningsClaimed(msg.sender, userShare);
+    }
+
 
     function _beforeAddLiquidity(
         address sender,
@@ -171,37 +194,13 @@ contract SportsBetting is BaseHook, ERC20 {
         // Ensure the match is still open (betting period is active)
         console.log("Block Timestamp:", block.timestamp);
         console.log("matchStartTime:", matchStartTime);
-        //require(block.timestamp >= matchStartTime, "Cannot remove liquidity before match ends");
+        require(block.timestamp >= matchStartTime, "Cannot remove liquidity before match ends");
 
         return BaseHook.beforeRemoveLiquidity.selector;
     }
 
-    // function _afterAddLiquidity(
-    //     address,
-    //     PoolKey calldata key,
-    //     IPoolManager.ModifyLiquidityParams calldata,
-    //     BalanceDelta delta,
-    //     BalanceDelta,
-    //     bytes calldata hookData
-    // ) internal override onlyPoolManager returns (bytes4, BalanceDelta) {
-    //     return (this.afterAddLiquidity.selector, delta);
-    // }
 
-    //function swapUSDCForUSDT_V4(uint256 amountIn) internal returns (uint256 amountOut) {
-    //     usdc.approve(address(manager), amountIn);
-
-    //     IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
-    //         zeroForOne: true, // USDC -> USDT
-    //         amountSpecified: int256(amountIn),
-    //         sqrtPriceLimitX96: 0
-    //     });
-
-    //     BalanceDelta delta = manager.swap(address(this), params, "");
-    //     amountOut = uint256(int256(delta.amount1())); // Get received USDT amount
-   // }
-
-
-
+    // Get the market cost of a bet 
     function getMarketCost() public view returns (uint256) {
         uint256 expSum = this.expScaled(liquidity[Outcome.LIV_WINS]) +
                         this.expScaled(liquidity[Outcome.LIV_DRAW]) +
@@ -219,6 +218,7 @@ contract SportsBetting is BaseHook, ERC20 {
         
     }
 
+    // Function for exponent
     function expScaled(uint256 x) public view returns (uint256) {
         //require(x <= 133e18, "Input too large for exp()");
         
@@ -228,6 +228,61 @@ contract SportsBetting is BaseHook, ERC20 {
         return fixedX.exp().unwrap(); // Compute e^x correctly
     }
 
-  
+    /// Sets the betting market as open
+    function openBetMarket(uint256 _startTime, uint256 _endTime) external  {
+        require(!betMarketOpen, "Market already open");
+        require(_startTime < _endTime, "Invalid time range");
+        
+        betMarketOpen = true;
+        betMarketClosed = false;
+        resolved = false;
+        startTime = _startTime;
+        endTime = _endTime;
+    }
+
+    function closeBetMarket() external {
+        require(betMarketOpen, "Market is not open");
+        require(block.timestamp >= startTime, "Cannot close before start");
+
+        betMarketOpen = false;
+        betMarketClosed = true;
+    }
+
+    /// Resolves the betting market with an outcome
+    function resolveMarket(uint8 outcome) external  {
+        require(betMarketClosed, "Market must be closed first");
+        require(!resolved, "Market already resolved");
+
+        resolved = true;
+
+        if (outcome == 1) {
+            outcomeIsWIN = true;
+        } else if (outcome == 2) {
+            outcomeIsLOSE = true;
+        } else if (outcome == 3) {
+            outcomeIsDRAW = true;
+        } else {
+            revert("Invalid outcome");
+        }
+    }
+
+    /// Resets the market for a new match
+    function resetMarket() external  {
+        require(resolved, "Market must be resolved first");
+
+        betMarketOpen = false;
+        betMarketClosed = false;
+        resolved = false;
+        outcomeIsWIN = false;
+        outcomeIsLOSE = false;
+        outcomeIsDRAW = false;
+        startTime = 0;
+        endTime = 0;
+    }
+
+    /// Gets the current state of the betting market
+    function getMarketState() external view returns (bool, bool, bool, uint256, uint256) {
+        return (betMarketOpen, betMarketClosed, resolved, startTime, endTime);
+    }
 
 }
