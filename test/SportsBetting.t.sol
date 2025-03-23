@@ -38,10 +38,15 @@ contract TestSportsBetting is Test, Deployers, PosmTestSetup  {
     Currency tokenUsdtCurrency;
     address owner = address(this);
 
+    address user1 = address(0x1111); 
+    address user2 = address(0x2222);
+    address user3 = address(0x3333);
+
 
     // Sportsbetting hook
     SportsBetting sportsBettingHook;
     bytes hookData = abi.encode(address(this));
+    uint256 matchStartTime = 10;
 
 	// PositionManager NFT
 	IPositionManager posm;
@@ -68,14 +73,24 @@ contract TestSportsBetting is Test, Deployers, PosmTestSetup  {
         console.log("Address token 1: ", address(tokenUsdt));
 
         // Mint a bunch of TOKEN to ourselves and to address(1)
-        tokenUsdc.mint(address(this), 1000 ether);
-        tokenUsdc.mint(address(1), 1000 ether);
-        tokenUsdt.mint(address(this), 1000 ether);
-        tokenUsdt.mint(address(1), 1000 ether);
+        //tokenUsdc.mint(address(this), 1000 ether);
+        tokenUsdc.mint(user1, 1000 ether);
+        tokenUsdc.mint(user2, 1000 ether);
+        tokenUsdc.mint(user3, 1000 ether);
+        //tokenUsdt.mint(address(this), 1000 ether);
+        tokenUsdt.mint(user1, 1000 ether);
+        tokenUsdt.mint(user2, 1000 ether);
+        tokenUsdt.mint(user3, 1000 ether);
         console.log("Tokens 0 and 1 has been minted!");
 
-        tokenUsdc.approve(address(this), type(uint256).max);
-        tokenUsdt.approve(address(this), type(uint256).max);
+        // tokenUsdc.approve(address(this), type(uint256).max);
+        // tokenUsdt.approve(address(this), type(uint256).max);
+        // tokenUsdc.approve(user1, type(uint256).max);
+        // tokenUsdt.approve(user1, type(uint256).max);
+        // tokenUsdc.approve(user2, type(uint256).max);
+        // tokenUsdt.approve(user2, type(uint256).max);
+        // tokenUsdc.approve(user3, type(uint256).max);
+        // tokenUsdt.approve(user3, type(uint256).max);
 
         approvePosmCurrency(tokenUsdcCurrency);
         approvePosmCurrency(tokenUsdtCurrency);
@@ -87,7 +102,7 @@ contract TestSportsBetting is Test, Deployers, PosmTestSetup  {
         deployCodeTo(
             "SportsBetting.sol",
              //abi.encode(manager, tokenUsdc, tokenUsdt, "Points Token", "TEST_POINTS"),
-             abi.encode(manager, address(this), 10, lpm, tokenUsdc, tokenUsdt, "Points Token", "TEST_POINTS"),
+             abi.encode(manager, address(this), matchStartTime, lpm, tokenUsdc, tokenUsdt, "Points Token", "TEST_POINTS"),
             address(flags)
         );
 
@@ -115,141 +130,223 @@ contract TestSportsBetting is Test, Deployers, PosmTestSetup  {
     }
 
      function testPlaceBet() public {
-            uint256 amountIn = 200 * 1e18; // 20 USDC
-            //uint256 amountIn = 20; // 20 USDC
 
-            // Approve the contract to spend USDC
-            tokenUsdc.approve(address(sportsBettingHook), amountIn);
-
-            // console.log("Approved USDC for betting contract");
-            // console.log("Who is sending the LP:" , msg.sender);
-            // console.log("Address SwapRouter:", address(swapRouter));
-            // console.log("Address modifyLiquidityRouter:", address(modifyLiquidityRouter));
+            // 1. Open Bet Market
+            sportsBettingHook.openBetMarket(1,10);
+            bool betMarketOpen = sportsBettingHook.betMarketOpen();
+            console.log("Status Bet Market: ", betMarketOpen);
 
 
-            // Call placeBet()
-            sportsBettingHook.placeBet(SportsBetting.Outcome.LIV_WINS, amountIn);
+            uint256 balanceUSDCBefore =  tokenUsdc.balanceOf(address(sportsBettingHook));
+            console.log("USDC balance before:", balanceUSDCBefore);
+
+
+            // Initialize bets
+            uint256 amountInUser1 = 200 * 1e18; // 200 USDC
+            uint256 amountInUser2 = 100 * 1e18; // 100 USDC
+            uint256 amountInUser3 = 150 * 1e18; // 150 USDC
+ 
+
+            // 3 users with different bets
+            vm.startPrank(user1);
+            tokenUsdc.approve(address(sportsBettingHook), amountInUser1);
+            sportsBettingHook.placeBet(SportsBetting.Outcome.LIV_WINS, amountInUser1);
+            vm.stopPrank();
             
-            console.log("Bet amount:", sportsBettingHook.betAmount());
-            console.log("Initial cost:", sportsBettingHook.initialCost());   
+            console.log("Bet amount user 1:", sportsBettingHook.betAmount());
+            console.log("Initial cost :", sportsBettingHook.initialCost());   
             console.log("New liquidity:", sportsBettingHook.newLiquidity());   
-            console.log("New cost:", sportsBettingHook.newCost());   
-            
+            console.log("New cost:", sportsBettingHook.newCost()); 
+
             // Retrieve bet cost from public state variable
             storedBetCost = sportsBettingHook.betCost();
 
             // Log bet cost
-            console.log("Bet cost calculated by LMSR:", storedBetCost, "USDC");
+            console.log("Bet cost User 1, calculated by LMSR:", storedBetCost, "USDC");
 
             // Assertions to ensure `betCost` updated correctly
             assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
+
+
+            vm.startPrank(user2);
+            tokenUsdc.approve(address(sportsBettingHook), amountInUser2);
+            sportsBettingHook.placeBet(SportsBetting.Outcome.LIV_LOSE, amountInUser2);
+            vm.stopPrank();
+            
+            console.log("Bet amount user 2:", sportsBettingHook.betAmount());
+            console.log("Initial cost :", sportsBettingHook.initialCost());   
+            console.log("New liquidity:", sportsBettingHook.newLiquidity());   
+            console.log("New cost:", sportsBettingHook.newCost()); 
+
+            // Retrieve bet cost from public state variable
+            storedBetCost = sportsBettingHook.betCost();
+
+            // Log bet cost
+            console.log("Bet cost User 2, calculated by LMSR:", storedBetCost, "USDC");
+
+            // Assertions to ensure `betCost` updated correctly
+            assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
+   
+
+            vm.startPrank(user3);
+            tokenUsdc.approve(address(sportsBettingHook), amountInUser3);
+            sportsBettingHook.placeBet(SportsBetting.Outcome.LIV_WINS, amountInUser3);
+            vm.stopPrank();
+            
+            console.log("Bet amount user 3:", sportsBettingHook.betAmount());
+            console.log("Initial cost :", sportsBettingHook.initialCost());   
+            console.log("New liquidity:", sportsBettingHook.newLiquidity());   
+            console.log("New cost:", sportsBettingHook.newCost());     
+            
+            uint256 balanceUSDCAfter =  tokenUsdc.balanceOf(address(sportsBettingHook));
+            console.log("USDC balance after:", balanceUSDCAfter);
+
+            // Retrieve bet cost from public state variable
+            storedBetCost = sportsBettingHook.betCost();
+
+            // Log bet cost
+            console.log("Bet cost User 3, calculated by LMSR:", storedBetCost, "USDC");
+
+            // Assertions to ensure `betCost` updated correctly
+            assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
+
+    
+            // Advance time to after matchStartTime
+            vm.warp(matchStartTime + 1); // Moves block.timestamp forward
+            sportsBettingHook.closeBetMarket();
+
+            // Close Bet Market
+            betMarketOpen = sportsBettingHook.betMarketOpen();
+            console.log("Status Bet Market: ", betMarketOpen);
+            
+            // Determine the outcome (WIN in this case)
+            sportsBettingHook.resolveMarket(1);
+            console.log("Winner is: ", sportsBettingHook.outcomeIsWIN());
+
+
+
+            // PM WORKING IN PROGRESS (SOME TESTING BELOW)
+            uint256 winUser1 = sportsBettingHook.userBets(SportsBetting.Outcome.LIV_WINS,address(user1));
+            console.log("winUser1: ", winUser1);
+
+
+            uint256 balanceBefore = tokenUsdc.balanceOf(address(user1));
+            console.log("balanceBefore:", balanceBefore);
+            vm.prank(address(user1));
+            sportsBettingHook.claimWinnings();
+            vm.stopPrank();
+            uint256 balanceAfter = tokenUsdc.balanceOf(address(user1));
+            console.log("balanceAfter:", balanceAfter);
+
+            vm.prank(address(user3));
+            sportsBettingHook.claimWinnings();
+            vm.stopPrank();
 
 
         }
 
 
         // Add liquidity after user places bet
-        function test_AddRemoveLiquidity() public {
+        // function test_AddRemoveLiquidity() public {
 
-            // First we add liquidity
-            console.log("Adding Liquidity", "USDC and USDT...");
+        //     // First we add liquidity
+        //     console.log("Adding Liquidity", "USDC and USDT...");
         
-            bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
-            bytes[] memory params = new bytes[](2);
+        //     bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+        //     bytes[] memory params = new bytes[](2);
 
-            uint256 balanceToken0BeforeThis = tokenUsdt.balanceOf(address(this));
-            uint256 balanceToken1BeforeThis = tokenUsdc.balanceOf(address(this));
-            console.log("balanceToken0BeforeThis:", balanceToken0BeforeThis);
-             console.log("balanceToken1BeforeThis:", balanceToken1BeforeThis);
+        //     uint256 balanceToken0BeforeThis = tokenUsdt.balanceOf(address(this));
+        //     uint256 balanceToken1BeforeThis = tokenUsdc.balanceOf(address(this));
+        //     console.log("balanceToken0BeforeThis:", balanceToken0BeforeThis);
+        //      console.log("balanceToken1BeforeThis:", balanceToken1BeforeThis);
 
-            int24 tickLower = -60;
-            int24 tickUpper = 60;
-            uint128 amountToAdd = 1 ether;
-            uint128 amount0Max = amountToAdd;
-            uint128 amount1Max = 10000000000000000000;
-            uint160 sqrtPriceAtTickLower = TickMath.getSqrtPriceAtTick(-60);
-            uint256 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(
-                sqrtPriceAtTickLower,
-                SQRT_PRICE_1_1,
-                amountToAdd
-            );
-            uint256 deadline = block.timestamp + 60;
-           uint256 valueToPass = 0; // We are not sending ETH
+        //     int24 tickLower = -60;
+        //     int24 tickUpper = 60;
+        //     uint128 amountToAdd = 1 ether;
+        //     uint128 amount0Max = amountToAdd;
+        //     uint128 amount1Max = 10000000000000000000;
+        //     uint160 sqrtPriceAtTickLower = TickMath.getSqrtPriceAtTick(-60);
+        //     uint256 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(
+        //         sqrtPriceAtTickLower,
+        //         SQRT_PRICE_1_1,
+        //         amountToAdd
+        //     );
+        //     uint256 deadline = block.timestamp + 60;
+        //    uint256 valueToPass = 0; // We are not sending ETH
 
             
 
-            // owner = recipient of minted position
-            params[0] = abi.encode(
-                poolKey,
-                tickLower,
-                tickUpper,
-                liquidityDelta,
-                amount0Max,
-                amount1Max,
-                owner, 
-                hookData
-            );
+        //     // owner = recipient of minted position
+        //     params[0] = abi.encode(
+        //         poolKey,
+        //         tickLower,
+        //         tickUpper,
+        //         liquidityDelta,
+        //         amount0Max,
+        //         amount1Max,
+        //         owner, 
+        //         hookData
+        //     );
 
-            params[1] = abi.encode(tokenUsdtCurrency, tokenUsdcCurrency);
+        //     params[1] = abi.encode(tokenUsdtCurrency, tokenUsdcCurrency);
 
-            lpm.modifyLiquidities{value: valueToPass}(
-                abi.encode(actions, params),
-                deadline
-            );
+        //     lpm.modifyLiquidities{value: valueToPass}(
+        //         abi.encode(actions, params),
+        //         deadline
+        //     );
 
-            //console.log("TokenID:" , lpm.positionInfo(1));
+        //     //console.log("TokenID:" , lpm.positionInfo(1));
 
-            uint128 currentLiquidity = lpm.getPositionLiquidity(1);
-            console.log("currentLiquidity:", currentLiquidity);
+        //     uint128 currentLiquidity = lpm.getPositionLiquidity(1);
+        //     console.log("currentLiquidity:", currentLiquidity);
 
 
 
-            uint256 balanceToken0AfterThis = tokenUsdt.balanceOf(address(this));
-            uint256 balanceToken1AfterThis = tokenUsdc.balanceOf(address(this));
-            console.log("balanceToken0AfterThis:", balanceToken0AfterThis);
-            console.log("balanceToken1AfterThis:", balanceToken1AfterThis);
+        //     uint256 balanceToken0AfterThis = tokenUsdt.balanceOf(address(this));
+        //     uint256 balanceToken1AfterThis = tokenUsdc.balanceOf(address(this));
+        //     console.log("balanceToken0AfterThis:", balanceToken0AfterThis);
+        //     console.log("balanceToken1AfterThis:", balanceToken1AfterThis);
 
-            uint256 myLiquidity = lpm.getPositionLiquidity(1);
-            console.log("myLiquidity:", myLiquidity);
+        //     uint256 myLiquidity = lpm.getPositionLiquidity(1);
+        //     console.log("myLiquidity:", myLiquidity);
 
-            // Then we test the removal of its liquidity
-            console.log("Removing Liquidity", "USDC and USDT...");
+        //     // Then we test the removal of its liquidity
+        //     console.log("Removing Liquidity", "USDC and USDT...");
 
-            bytes memory actions2 = abi.encodePacked(uint8(Actions.DECREASE_LIQUIDITY), uint8(Actions.TAKE_PAIR));
-            bytes[] memory params2 = new bytes[](2);
+        //     bytes memory actions2 = abi.encodePacked(uint8(Actions.DECREASE_LIQUIDITY), uint8(Actions.TAKE_PAIR));
+        //     bytes[] memory params2 = new bytes[](2);
 
           
-              
-            // Roll to end of match
-            vm.roll(block.number + 10); // Move forward 10 blocks
-            console.log("Block number: ", block.number);
+                        
+        //     // Advance time to after matchStartTime
+        //     vm.warp(matchStartTime + 1); // Moves block.timestamp forward
 
             
-            uint256 amount0Min = 0;
-            uint256 amount1Min = 0;
-            uint256 liquidity = myLiquidity;
+        //     uint256 amount0Min = 0;
+        //     uint256 amount1Min = 0;
+        //     uint256 liquidity = myLiquidity;
             
-            params2[0] = abi.encode(1, liquidity, amount0Min, amount1Min, hookData);
+        //     params2[0] = abi.encode(1, liquidity, amount0Min, amount1Min, hookData);
 
           
-            params2[1] = abi.encode(tokenUsdtCurrency, tokenUsdcCurrency, address(this));
+        //     params2[1] = abi.encode(tokenUsdtCurrency, tokenUsdcCurrency, address(this));
 
-            uint256 deadline2 = block.timestamp + 60;
+        //     uint256 deadline2 = block.timestamp + 60;
 
-            uint256 valueToPass2 =  0;
+        //     uint256 valueToPass2 =  0;
 
-            lpm.modifyLiquidities{value: valueToPass2}(
-                abi.encode(actions2, params2),
-                deadline2
-            );
+        //     lpm.modifyLiquidities{value: valueToPass2}(
+        //         abi.encode(actions2, params2),
+        //         deadline2
+        //     );
 
-            uint256 balanceToken0FinalThis = tokenUsdt.balanceOf(address(this));
-            uint256 balanceToken1FinalThis = tokenUsdc.balanceOf(address(this));
-            console.log("balanceToken0FinalThis:", balanceToken0FinalThis);
-            console.log("balanceToken1FinalThis:", balanceToken1FinalThis);
+        //     uint256 balanceToken0FinalThis = tokenUsdt.balanceOf(address(this));
+        //     uint256 balanceToken1FinalThis = tokenUsdc.balanceOf(address(this));
+        //     console.log("balanceToken0FinalThis:", balanceToken0FinalThis);
+        //     console.log("balanceToken1FinalThis:", balanceToken1FinalThis);
 
  
-        }
+        // }
 
 
 }

@@ -53,6 +53,7 @@ contract SportsBetting is BaseHook, ERC20 {
     event BetPlaced(address indexed user, Outcome outcome, uint256 amount, uint256 cost);
     event MatchSettled(Outcome winningOutcome);
     event PayoutClaimed(address user, uint256 userStake, uint256 totalPool, uint256 contractBalance, uint256 reward);
+    event WinningsClaimed(address user, uint256 userPrice);
 
     constructor(
         IPoolManager _manager,
@@ -154,12 +155,12 @@ contract SportsBetting is BaseHook, ERC20 {
         console.log("user Price: ", userPrice);
 
         // Prevent reentrancy
-        //userBets[winningOutcome][msg.sender] = 0;
+        userBets[winningOutcome][msg.sender] = 0;
 
         // Transfer winnings
-        //require(usdc.transfer(msg.sender, userShare), "USDC transfer failed");
+        require(usdc.transfer(msg.sender, userPrice), "USDC transfer failed");
 
-        //emit WinningsClaimed(msg.sender, userShare);
+        emit WinningsClaimed(msg.sender, userPrice);
     }
 
 
