@@ -13,12 +13,19 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import "forge-std/console.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import "@openzeppelin/contracts/utils/math/SignedMath.sol";
+
 
 contract SportsBettingHook is BaseHook {
     IERC20 public usdc;
     IERC20 public tokenHomeWin;
     address public admin;
     uint256 public liquidityParameter = 500e18;
+
+    using StateLibrary for IPoolManager;
+    PoolId poolId;
 
     // Temporary as public state variables
     uint256 public initialCost;
@@ -44,6 +51,7 @@ contract SportsBettingHook is BaseHook {
     // State variables to track pool balances
     uint256 public usdcInWinPool = 0;
     uint256 public homeWinInWinPool = 0;
+    uint256 public homeWinPrice = 0;
 
     IPositionManager posm;
 
@@ -113,7 +121,7 @@ contract SportsBettingHook is BaseHook {
         newCost = getMarketCost();
         betCost = newCost - initialCost;
 
-        require(usdc.transferFrom(msg.sender, address(this), betCost), "USDC transfer failed");
+        // require(usdc.transferFrom(msg.sender, address(this), betCost), "USDC transfer failed");
         userBets[_outcome][msg.sender] += _amount;
 
         emit BetPlaced(msg.sender, _outcome, _amount, betCost);
@@ -161,15 +169,49 @@ contract SportsBettingHook is BaseHook {
     }
 
 
-    function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
+    function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         internal
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        // Insert our code here
-        // Get price in AMM pool
-        // getTokenPricesAMM();
-        // console.log("Current price HomeWin token in AMM pool:", homeWinPrice);
+   
+   
+        // 1. Get current pool balances from AMM LP
+        uint256 amountX = tokenHomeWin.balanceOf(address(poolManager));
+        console.log("amount HomeWin:", amountX);
+        uint256 amountY = usdc.balanceOf(address(poolManager));
+        console.log("amount USDC:", amountY);
+
+        // 2. Get the amount that will be swapped
+        uint256 dx = uint256(SignedMath.abs(params.amountSpecified));
+        console.log("Incoming buy for WIN (amountIn):", dx);
+
+        
+        
+        // 3.  Get the cost to swap in AMM
+        uint256 constantK = amountY * amountX;
+        // (X - dX) * (Y + dY) = k
+        uint256 dy =  (constantK/(amountX - dx)) - amountY;
+        console.log("How many USDC Tokens: ", dy);
+          
+        
+        // 4. Get the cost from LMSR
+        console.log("Current price HomeWin token in AMM pool:", betCost);
+
+        // 5. Determine fee to equate price AMM and price LMSR
+        
+           
+            uint256 fee = 0;
+             // Scenario 1: Price AMM > Price LMSR
+            if (betCost<dx) {
+                fee = 1e18 - betCost * 1e18 / dx; // fee as 1e18
+
+            } else if (betCost>dx) {  // Scenario 2: Price AMM < Price LMSR
+                fee = betCost * 1e18 / dx - 1e18;
+            }
+            console.log("Current fee:", fee);
+           
+
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
@@ -305,15 +347,20 @@ contract SportsBettingHook is BaseHook {
         return (betMarketOpen, betMarketClosed, resolved, startTime, endTime);
     }
 
-    // Function to get token prices in the AMM pools
-    function getTokenPricesAMM() external view returns (uint256 homeWinPrice) {
-        // Calculate token prices based on the USDC amounts and token amounts
-        // Price = USDC amount / token amount
-        
-       
-        homeWinPrice = (usdcInWinPool) / homeWinInWinPool;
+    function getAMMPrice(PoolKey memory key) internal view returns (uint256 price) {
+        PoolId id = key.toId(); // Convert PoolKey to PoolId first
 
-        return (homeWinPrice);
+        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(id);
+
+        uint256 numerator = uint256(sqrtPriceX96) * uint256(sqrtPriceX96);
+        uint256 denominator = 1 << 192;
+
+        // Assume token0 = USDC (6 decimals), token1 = WIN (18 decimals)
+        // So: 10^(6 - 18) = 1e-12 → Multiply by 1e12
+        price = (numerator * 1e12) / denominator;
     }
+
+
+
 
 }

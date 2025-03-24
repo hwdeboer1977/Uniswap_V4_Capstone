@@ -30,6 +30,8 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
      using CurrencyLibrary for Currency;
 
     uint256 public storedBetCost; // State variable to store bet cost
+    uint256 public priceHomeWinAMM;
+
     MockERC20 tokenUsdc;
     MockERC20 tokenHomeWin;
 
@@ -43,6 +45,8 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
     address user2 = address(0x2222);
     address user3 = address(0x3333);
 
+    // Initialize bets
+    uint256 amountInUser1 = 20 * 1e18; // 20 WIN Tokens
 
     // Sportsbetting hook
     SportsBettingHook sportsBettingHook;
@@ -60,9 +64,6 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
     
         // Deploy an instance of PositionManager
 	    deployPosm(manager);
-        //posm = lpm;
-
-    
 
 
         // Create 2 ERC-20 test tokens
@@ -74,11 +75,11 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
         console.log("Address token 1: ", address(tokenHomeWin));
 
         // Mint a bunch of TOKEN to ourselves and to address(1)
-        tokenUsdc.mint(address(this), 1000 ether);
+        tokenUsdc.mint(address(this), 1000000 ether);
         tokenUsdc.mint(user1, 1000 ether);
         tokenUsdc.mint(user2, 1000 ether);
         tokenUsdc.mint(user3, 1000 ether);
-        tokenHomeWin.mint(address(this), 1000 ether);
+        tokenHomeWin.mint(address(this), 1000000 ether);
         tokenHomeWin.mint(user1, 1000 ether);
         tokenHomeWin.mint(user2, 1000 ether);
         tokenHomeWin.mint(user3, 1000 ether);
@@ -100,13 +101,9 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
         );
 
 
-          
-
         // Deploy our hook
         sportsBettingHook = SportsBettingHook(address(flags));
         
-
-
         // // Create the pool
         poolKey  = PoolKey(tokenHomeWinCurrency, tokenUsdcCurrency, 3000, 60, IHooks(sportsBettingHook));
         
@@ -122,125 +119,68 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
 
     }
 
-    //  function testPlaceBet() public {
+    function getLMSRPrice() public {
+        
+            // Swap functionality here
 
-    //         // 1. Open Bet Market
-    //         sportsBettingHook.openBetMarket(1,10);
-    //         bool betMarketOpen = sportsBettingHook.betMarketOpen();
-    //         console.log("Status Bet Market: ", betMarketOpen);
+             vm.startPrank(user1);
 
+            tokenUsdc.approve(address(swapRouter), type(uint256).max);
+            tokenHomeWin.approve(address(swapRouter), type(uint256).max);
 
-    //         uint256 balanceUSDCBefore =  tokenUsdc.balanceOf(address(sportsBettingHook));
-    //         console.log("USDC balance before:", balanceUSDCBefore);
+            uint256 balanceUSDCBefore = tokenUsdc.balanceOf(user1);
+            uint256 balanceHomeWinBefore = tokenHomeWin.balanceOf(user1);
+            // console.log("balanceUSDCBefore User 1:" , balanceUSDCBefore);
+            // console.log("balanceHomeWinBefore User 1:" , balanceHomeWinBefore);
 
+            uint256 managerUSDCBalanceBefore = tokenUsdc.balanceOf(address(manager));
+            uint256 managerHomeWinBalanceBefore = tokenHomeWin.balanceOf(address(manager));
+            // console.log("managerUSDCBalanceBefore:" , managerUSDCBalanceBefore);
+            // console.log("managerHomeWinBalanceBefore:" , managerHomeWinBalanceBefore);
 
-    //         // Initialize bets
-    //         uint256 amountInUser1 = 200 * 1e18; // 200 USDC
-    //         uint256 amountInUser2 = 100 * 1e18; // 100 USDC
-    //         uint256 amountInUser3 = 150 * 1e18; // 150 USDC
- 
-
-    //         // 3 users with different bets
-    //         vm.startPrank(user1);
-    //         tokenUsdc.approve(address(sportsBettingHook), amountInUser1);
-    //         sportsBettingHook.placeBet(SportsBetting.Outcome.LIV_WINS, amountInUser1);
-    //         vm.stopPrank();
             
-    //         console.log("Bet amount user 1:", sportsBettingHook.betAmount());
-    //         console.log("Initial cost :", sportsBettingHook.initialCost());   
-    //         console.log("New liquidity:", sportsBettingHook.newLiquidity());   
-    //         console.log("New cost:", sportsBettingHook.newCost()); 
 
-    //         // Retrieve bet cost from public state variable
-    //         storedBetCost = sportsBettingHook.betCost();
-
-    //         // Log bet cost
-    //         console.log("Bet cost User 1, calculated by LMSR:", storedBetCost, "USDC");
-
-    //         // Assertions to ensure `betCost` updated correctly
-    //         assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
+            // Determine price of token HomeWin based on its liquidity
+            // This is a price at the margin
+            priceHomeWinAMM = managerUSDCBalanceBefore/managerHomeWinBalanceBefore;
+            // console.log("priceHomeWinAMM:", priceHomeWinAMM);
 
 
-    //         vm.startPrank(user2);
-    //         tokenUsdc.approve(address(sportsBettingHook), amountInUser2);
-    //         sportsBettingHook.placeBet(SportsBetting.Outcome.LIV_LOSE, amountInUser2);
-    //         vm.stopPrank();
+
+            // Determine price of token HomeWin based on LMSR
             
-    //         console.log("Bet amount user 2:", sportsBettingHook.betAmount());
-    //         console.log("Initial cost :", sportsBettingHook.initialCost());   
-    //         console.log("New liquidity:", sportsBettingHook.newLiquidity());   
-    //         console.log("New cost:", sportsBettingHook.newCost()); 
+            // 1. Open Bet Market
+            sportsBettingHook.openBetMarket(1,10);
+            bool betMarketOpen = sportsBettingHook.betMarketOpen();
+            console.log("Status Bet Market: ", betMarketOpen);
 
-    //         // Retrieve bet cost from public state variable
-    //         storedBetCost = sportsBettingHook.betCost();
+          
+     
 
-    //         // Log bet cost
-    //         console.log("Bet cost User 2, calculated by LMSR:", storedBetCost, "USDC");
+            // 3 users with different bets
+            tokenUsdc.approve(address(sportsBettingHook), amountInUser1);
+            sportsBettingHook.placeBet(SportsBettingHook.Outcome.LIV_WINS, amountInUser1);
+            
+            
+            console.log("Bet amount user 1:", sportsBettingHook.betAmount());
+            console.log("Initial cost :", sportsBettingHook.initialCost());   
+            console.log("New liquidity:", sportsBettingHook.newLiquidity());   
+            console.log("New cost:", sportsBettingHook.newCost()); 
 
-    //         // Assertions to ensure `betCost` updated correctly
-    //         assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
+            // Retrieve bet cost from public state variable
+            storedBetCost = sportsBettingHook.betCost();
+
+            // Log bet cost
+            console.log("Bet cost User 1, calculated by LMSR:", storedBetCost, "USDC");
+
+            // Assertions to ensure `betCost` updated correctly
+            assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
+
+            
    
+    }
 
-    //         vm.startPrank(user3);
-    //         tokenUsdc.approve(address(sportsBettingHook), amountInUser3);
-    //         sportsBettingHook.placeBet(SportsBetting.Outcome.LIV_WINS, amountInUser3);
-    //         vm.stopPrank();
-            
-    //         console.log("Bet amount user 3:", sportsBettingHook.betAmount());
-    //         console.log("Initial cost :", sportsBettingHook.initialCost());   
-    //         console.log("New liquidity:", sportsBettingHook.newLiquidity());   
-    //         console.log("New cost:", sportsBettingHook.newCost());     
-            
-    //         uint256 balanceUSDCAfter =  tokenUsdc.balanceOf(address(sportsBettingHook));
-    //         console.log("USDC balance after:", balanceUSDCAfter);
-
-    //         // Retrieve bet cost from public state variable
-    //         storedBetCost = sportsBettingHook.betCost();
-
-    //         // Log bet cost
-    //         console.log("Bet cost User 3, calculated by LMSR:", storedBetCost, "USDC");
-
-    //         // Assertions to ensure `betCost` updated correctly
-    //         assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
-
-    
-    //         // Advance time to after matchStartTime
-    //         vm.warp(matchStartTime + 1); // Moves block.timestamp forward
-    //         sportsBettingHook.closeBetMarket();
-
-    //         // Close Bet Market
-    //         betMarketOpen = sportsBettingHook.betMarketOpen();
-    //         console.log("Status Bet Market: ", betMarketOpen);
-            
-    //         // Determine the outcome (WIN in this case)
-    //         sportsBettingHook.resolveMarket(1);
-    //         console.log("Winner is: ", sportsBettingHook.outcomeIsWIN());
-
-
-
-    //         // PM WORKING IN PROGRESS (SOME TESTING BELOW)
-    //         uint256 winUser1 = sportsBettingHook.userBets(SportsBetting.Outcome.LIV_WINS,address(user1));
-    //         console.log("winUser1: ", winUser1);
-
-
-    //         uint256 balanceBefore = tokenUsdc.balanceOf(address(user1));
-    //         console.log("balanceBefore:", balanceBefore);
-    //         vm.prank(address(user1));
-    //         sportsBettingHook.claimWinnings();
-    //         vm.stopPrank();
-    //         uint256 balanceAfter = tokenUsdc.balanceOf(address(user1));
-    //         console.log("balanceAfter:", balanceAfter);
-
-    //         vm.prank(address(user3));
-    //         sportsBettingHook.claimWinnings();
-    //         vm.stopPrank();
-
-
-    //     }
-
-
-        // Add liquidity after user places bet
-        function test_AddRemoveLiquidity() public {
+    function addLiquidity() public {
 
             // First we add liquidity
             console.log("Adding Liquidity", "USDC and USDT...");
@@ -252,17 +192,17 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
             uint256 balanceToken1BeforeThis = tokenUsdc.balanceOf(address(this));
              uint256 balanceToken0BeforeManager = tokenHomeWin.balanceOf(address(manager));
             uint256 balanceToken1BeforeManager = tokenUsdc.balanceOf(address(manager));
-            console.log("balanceToken0BeforeThis:", balanceToken0BeforeThis);
-            console.log("balanceToken1BeforeThis:", balanceToken1BeforeThis);
-            console.log("balanceToken0BeforeManager:", balanceToken0BeforeManager);
-            console.log("balanceToken1BeforeManager:", balanceToken1BeforeManager);
+            // console.log("balanceToken0BeforeThis:", balanceToken0BeforeThis);
+            // console.log("balanceToken1BeforeThis:", balanceToken1BeforeThis);
+            // console.log("balanceToken0BeforeManager:", balanceToken0BeforeManager);
+            // console.log("balanceToken1BeforeManager:", balanceToken1BeforeManager);
 
 
             int24 tickLower = -60;
             int24 tickUpper = 60;
-            uint128 amountToAdd = 10 ether;
+            uint128 amountToAdd = 2000 * 1e18; // 2000 USDC;
             uint128 amount0Max = amountToAdd;
-            uint128 amount1Max = 10000000000000000000;
+            uint128 amount1Max = 2000000000000000000000;
             uint160 sqrtPriceAtTickLower = TickMath.getSqrtPriceAtTick(-60);
             uint256 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(
                 sqrtPriceAtTickLower,
@@ -303,60 +243,70 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
             uint256 balanceToken1AfterThis = tokenUsdc.balanceOf(address(this));
             uint256 balanceToken0AfterManager = tokenHomeWin.balanceOf(address(manager));
             uint256 balanceToken1AfterManager = tokenUsdc.balanceOf(address(manager));
-            console.log("balanceToken0AfterThis:", balanceToken0AfterThis);
-            console.log("balanceToken1AfterThis:", balanceToken1AfterThis);
-            console.log("balanceToken0AfterManager:", balanceToken0AfterManager);
-            console.log("balanceToken1AfterManager:", balanceToken1AfterManager);
+            // console.log("balanceToken0AfterThis:", balanceToken0AfterThis);
+            // console.log("balanceToken1AfterThis:", balanceToken1AfterThis);
+            // console.log("balanceToken0AfterManager:", balanceToken0AfterManager);
+            // console.log("balanceToken1AfterManager:", balanceToken1AfterManager);
+
+    }
+
+        // Add liquidity after user places bet
+        function test_AddRemoveLiquidity() public {
+            
+           
+
+            // Step 1: Add liquidity
+            addLiquidity();
+
+            // Step 2: Get LMSR Price
+            getLMSRPrice();
 
 
-
-            // Swap functionality here
-
-            vm.startPrank(user1);
-
-            tokenUsdc.approve(address(swapRouter), type(uint256).max);
-            tokenHomeWin.approve(address(swapRouter), type(uint256).max);
-
-            uint256 balanceUSDCBefore = tokenUsdc.balanceOf(user1);
-            uint256 balanceHomeWinBefore = tokenHomeWin.balanceOf(user1);
-            console.log("balanceUSDCBefore User 1:" , balanceUSDCBefore);
-            console.log("balanceHomeWinBefore User 1:" , balanceHomeWinBefore);
-
-            uint256 managerUSDCBalanceBefore = tokenUsdc.balanceOf(address(manager));
-            uint256 managerHomeWinBalanceBefore = tokenHomeWin.balanceOf(address(manager));
-            console.log("managerUSDCBalanceBefore:" , managerUSDCBalanceBefore);
-            console.log("managerHomeWinBalanceBefore:" , managerHomeWinBalanceBefore);
-
-            uint256 wrapAmount = 1 ether;
+            // Get prices AMM and LMSR
+            console.log("storedBetCost: ", storedBetCost);
+            console.log("priceHomeWinAMM: ", priceHomeWinAMM);
+        
+            
+            uint256 wrapAmount = amountInUser1;
 
             PoolSwapTest.TestSettings memory testSettings =
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
             
+            uint160 MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
             swapRouter.swap(
                 poolKey,
                 IPoolManager.SwapParams({
-                    zeroForOne: true, // USDC (0) to HOMEWIN (1)
+                    // zeroForOne: true, // HOMEWIN (0) to USDC (1)
+                    zeroForOne: false, // USDC (1) to HOMEWIN (0)
                     amountSpecified: -int256(wrapAmount),
-                    sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+                    // sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1 // zeroForOne = true
+                     sqrtPriceLimitX96: MAX_SQRT_RATIO - 1 // // zeroForOne = false
                 }),
                 testSettings,
                 ""
             );
 
-            vm.stopPrank();
+           
 
             
             uint256 balanceUSDCAfter = tokenUsdc.balanceOf(user1);
             uint256 balanceHomeWinAfter = tokenHomeWin.balanceOf(user1);
-            console.log("balanceUSDCAfter User 1:" , balanceUSDCAfter);
-            console.log("balanceHomeWinAfter User 1:" , balanceHomeWinAfter);
+            // console.log("balanceUSDCAfter User 1:" , balanceUSDCAfter);
+            // console.log("balanceHomeWinAfter User 1:" , balanceHomeWinAfter);
 
             uint256 managerUSDCBalanceAfter = tokenUsdc.balanceOf(address(manager));
             uint256 managerHomeWinBalanceAfter = tokenHomeWin.balanceOf(address(manager));
-            console.log("managerUSDCBalanceAfter:" , managerUSDCBalanceAfter);
-            console.log("managerHomeWinBalanceAfter:" , managerHomeWinBalanceAfter);
+            // console.log("managerUSDCBalanceAfter:" , managerUSDCBalanceAfter);
+            // console.log("managerHomeWinBalanceAfter:" , managerHomeWinBalanceAfter);
 
 
+
+            vm.stopPrank();
+ 
+         }
+
+    function removeLiquidity() public {
+        
         //     uint256 myLiquidity = lpm.getPositionLiquidity(1);
         //     console.log("myLiquidity:", myLiquidity);
 
@@ -394,9 +344,6 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
         //     uint256 balanceToken1FinalThis = tokenUsdc.balanceOf(address(this));
         //     console.log("balanceToken0FinalThis:", balanceToken0FinalThis);
         //     console.log("balanceToken1FinalThis:", balanceToken1FinalThis);
-
- 
-         }
-
+    }
 
 }
