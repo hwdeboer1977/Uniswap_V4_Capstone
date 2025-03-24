@@ -12,10 +12,11 @@ import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import "forge-std/console.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 
-contract SportsBettingHook is BaseHook, ERC20 {
+contract SportsBettingHook is BaseHook {
     IERC20 public usdc;
-    IERC20 public usdt;
+    IERC20 public tokenHomeWin;
     address public admin;
     uint256 public liquidityParameter = 500e18;
 
@@ -40,6 +41,10 @@ contract SportsBettingHook is BaseHook, ERC20 {
     uint256 public startTime;
     uint256 public endTime;
 
+    // State variables to track pool balances
+    uint256 public usdcInWinPool = 0;
+    uint256 public homeWinInWinPool = 0;
+
     IPositionManager posm;
 
     enum Outcome { LIV_WINS, LIV_DRAW, LIV_LOSE }
@@ -57,19 +62,17 @@ contract SportsBettingHook is BaseHook, ERC20 {
 
     constructor(
         IPoolManager _manager,
-         address _protocolOwner,
+        address _protocolOwner,
         uint256 _matchStartTime,
         IPositionManager _posm,
         address _usdc,
-        address _usdt,
-        string memory _name,
-        string memory _symbol
-    ) BaseHook(_manager) ERC20(_name, _symbol, 18) {
+        address _tokenHomeWin
+    ) BaseHook(_manager)  {
         protocolOwner = _protocolOwner;
         matchStartTime=_matchStartTime;
         posm = _posm;
         usdc = IERC20(_usdc);
-        usdt = IERC20(_usdt);
+        tokenHomeWin = IERC20(_tokenHomeWin);
         liquidity[Outcome.LIV_WINS] = 0;
         liquidity[Outcome.LIV_DRAW] = 0;
         liquidity[Outcome.LIV_LOSE] = 0;
@@ -77,7 +80,7 @@ contract SportsBettingHook is BaseHook, ERC20 {
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
-            beforeSwap: false,
+            beforeSwap: true,
             afterSwap: false,
             beforeAddLiquidity: true,
             afterAddLiquidity: false,
@@ -115,13 +118,7 @@ contract SportsBettingHook is BaseHook, ERC20 {
 
         emit BetPlaced(msg.sender, _outcome, _amount, betCost);
 
-        // Swap half of USDC for USDT using Uniswap V4
-        uint256 halfUSDC = betCost / 2;
 
-        //uint256 usdtReceived = swapUSDCForUSDT_V4(halfUSDC);
-
-        // Add USDC/USDT liquidity to Uniswap V4
-        //addLiquidityToUniswap(halfUSDC, usdtReceived);
     }
 
     
@@ -161,6 +158,19 @@ contract SportsBettingHook is BaseHook, ERC20 {
         require(usdc.transfer(msg.sender, userPrice), "USDC transfer failed");
 
         emit WinningsClaimed(msg.sender, userPrice);
+    }
+
+
+    function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
+        internal
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        // Insert our code here
+        // Get price in AMM pool
+        // getTokenPricesAMM();
+        // console.log("Current price HomeWin token in AMM pool:", homeWinPrice);
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
 
@@ -293,6 +303,17 @@ contract SportsBettingHook is BaseHook, ERC20 {
     /// Gets the current state of the betting market
     function getMarketState() external view returns (bool, bool, bool, uint256, uint256) {
         return (betMarketOpen, betMarketClosed, resolved, startTime, endTime);
+    }
+
+    // Function to get token prices in the AMM pools
+    function getTokenPricesAMM() external view returns (uint256 homeWinPrice) {
+        // Calculate token prices based on the USDC amounts and token amounts
+        // Price = USDC amount / token amount
+        
+       
+        homeWinPrice = (usdcInWinPool) / homeWinInWinPool;
+
+        return (homeWinPrice);
     }
 
 }

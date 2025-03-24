@@ -24,6 +24,7 @@ import {PosmTestSetup} from "v4-periphery/test/shared/PosmTestSetup.sol";
 import {Deploy, IPositionDescriptor} from "v4-periphery/test/shared/Deploy.sol";
 import {PositionDescriptor} from "lib/v4-periphery/src/PositionDescriptor.sol";
 import {Actions} from "v4-periphery/src/libraries/Actions.sol";
+import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 
 contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
      using CurrencyLibrary for Currency;
@@ -89,12 +90,12 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
 
         // Deploy hook to an address that has the proper flags set
         uint160 flags = uint160(
-            Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG 
+            Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG 
         );
         deployCodeTo(
-            "SportsBetting.sol",
+            "SportsBettingHook.sol",
              //abi.encode(manager, tokenUsdc, tokenUsdt, "Points Token", "TEST_POINTS"),
-             abi.encode(manager, address(this), matchStartTime, lpm, tokenUsdc, tokenHomeWin, "Points Token", "TEST_POINTS"),
+             abi.encode(manager, address(this), matchStartTime, lpm, tokenUsdc, tokenHomeWin),
             address(flags)
         );
 
@@ -249,12 +250,17 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
 
             uint256 balanceToken0BeforeThis = tokenHomeWin.balanceOf(address(this));
             uint256 balanceToken1BeforeThis = tokenUsdc.balanceOf(address(this));
+             uint256 balanceToken0BeforeManager = tokenHomeWin.balanceOf(address(manager));
+            uint256 balanceToken1BeforeManager = tokenUsdc.balanceOf(address(manager));
             console.log("balanceToken0BeforeThis:", balanceToken0BeforeThis);
-             console.log("balanceToken1BeforeThis:", balanceToken1BeforeThis);
+            console.log("balanceToken1BeforeThis:", balanceToken1BeforeThis);
+            console.log("balanceToken0BeforeManager:", balanceToken0BeforeManager);
+            console.log("balanceToken1BeforeManager:", balanceToken1BeforeManager);
+
 
             int24 tickLower = -60;
             int24 tickUpper = 60;
-            uint128 amountToAdd = 1 ether;
+            uint128 amountToAdd = 10 ether;
             uint128 amount0Max = amountToAdd;
             uint128 amount1Max = 10000000000000000000;
             uint160 sqrtPriceAtTickLower = TickMath.getSqrtPriceAtTick(-60);
@@ -295,8 +301,61 @@ contract TestSportsBettingHook is Test, Deployers, PosmTestSetup  {
 
             uint256 balanceToken0AfterThis = tokenHomeWin.balanceOf(address(this));
             uint256 balanceToken1AfterThis = tokenUsdc.balanceOf(address(this));
+            uint256 balanceToken0AfterManager = tokenHomeWin.balanceOf(address(manager));
+            uint256 balanceToken1AfterManager = tokenUsdc.balanceOf(address(manager));
             console.log("balanceToken0AfterThis:", balanceToken0AfterThis);
             console.log("balanceToken1AfterThis:", balanceToken1AfterThis);
+            console.log("balanceToken0AfterManager:", balanceToken0AfterManager);
+            console.log("balanceToken1AfterManager:", balanceToken1AfterManager);
+
+
+
+            // Swap functionality here
+
+            vm.startPrank(user1);
+
+            tokenUsdc.approve(address(swapRouter), type(uint256).max);
+            tokenHomeWin.approve(address(swapRouter), type(uint256).max);
+
+            uint256 balanceUSDCBefore = tokenUsdc.balanceOf(user1);
+            uint256 balanceHomeWinBefore = tokenHomeWin.balanceOf(user1);
+            console.log("balanceUSDCBefore User 1:" , balanceUSDCBefore);
+            console.log("balanceHomeWinBefore User 1:" , balanceHomeWinBefore);
+
+            uint256 managerUSDCBalanceBefore = tokenUsdc.balanceOf(address(manager));
+            uint256 managerHomeWinBalanceBefore = tokenHomeWin.balanceOf(address(manager));
+            console.log("managerUSDCBalanceBefore:" , managerUSDCBalanceBefore);
+            console.log("managerHomeWinBalanceBefore:" , managerHomeWinBalanceBefore);
+
+            uint256 wrapAmount = 1 ether;
+
+            PoolSwapTest.TestSettings memory testSettings =
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+            
+            swapRouter.swap(
+                poolKey,
+                IPoolManager.SwapParams({
+                    zeroForOne: true, // USDC (0) to HOMEWIN (1)
+                    amountSpecified: -int256(wrapAmount),
+                    sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+                }),
+                testSettings,
+                ""
+            );
+
+            vm.stopPrank();
+
+            
+            uint256 balanceUSDCAfter = tokenUsdc.balanceOf(user1);
+            uint256 balanceHomeWinAfter = tokenHomeWin.balanceOf(user1);
+            console.log("balanceUSDCAfter User 1:" , balanceUSDCAfter);
+            console.log("balanceHomeWinAfter User 1:" , balanceHomeWinAfter);
+
+            uint256 managerUSDCBalanceAfter = tokenUsdc.balanceOf(address(manager));
+            uint256 managerHomeWinBalanceAfter = tokenHomeWin.balanceOf(address(manager));
+            console.log("managerUSDCBalanceAfter:" , managerUSDCBalanceAfter);
+            console.log("managerHomeWinBalanceAfter:" , managerHomeWinBalanceAfter);
+
 
         //     uint256 myLiquidity = lpm.getPositionLiquidity(1);
         //     console.log("myLiquidity:", myLiquidity);
