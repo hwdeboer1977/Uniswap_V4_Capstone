@@ -66,6 +66,8 @@ contract SportsBettingHookTest is Test, Deployers {
 
         address token0 = Currency.unwrap(key.currency0);
         address token1 = Currency.unwrap(key.currency1);
+        console.log("Address token 0: ", token0);
+         console.log("Address token 1: ", token1);
 
         // Cast to mock token interface if needed
         MockERC20(token0).mint(user1, 1000 ether);
@@ -136,6 +138,8 @@ contract SportsBettingHookTest is Test, Deployers {
 
     function test_swap_exactOutput_zeroForOne() public {
 
+       
+
         vm.startPrank(user1);
 
         uint256 balanceUserToken0 = currency0.balanceOf(user1);
@@ -168,6 +172,25 @@ contract SportsBettingHookTest is Test, Deployers {
             settings,
             ZERO_BYTES
         );
+   
+         // In real world dApp: 
+         // const encodedUser = ethers.utils.defaultAbiCoder.encode(["address"], [wallet.address]);
+         // await router.swap(key, swapParams, settings, encodedUser);
+
+        // Swap exact output 100 Token A
+
+        console.log("Address that calls swap:", msg.sender);
+        swapRouter.swap(
+            key,
+            IPoolManager.SwapParams({
+                zeroForOne: true,
+                amountSpecified: 200e18,
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            settings,
+            ZERO_BYTES
+           // abi.encode(msg.sender) // or user1
+        );
         uint balanceOfTokenAAfter = key.currency0.balanceOfSelf();
         uint balanceOfTokenBAfter = key.currency1.balanceOfSelf();
 
@@ -178,6 +201,15 @@ contract SportsBettingHookTest is Test, Deployers {
         uint256 balancePM1 = currency1.balanceOf(address(manager));  
         console.log("Balance PM currency 0: ", balancePM0);
         console.log("Balance PM currency 1: ", balancePM1);  
+
+
+
+
+        uint256 balanceHook0 = currency0.balanceOf(address(this));
+        uint256 balanceHook1 = currency1.balanceOf(address(this));  
+        console.log("Balance Hook currency 0: ", balanceHook0);
+        console.log("Balance Hook currency 1: ", balanceHook1);  
+
 
 
          uint token0ClaimID = CurrencyLibrary.toId(currency0);
@@ -198,6 +230,17 @@ contract SportsBettingHookTest is Test, Deployers {
         uint256 newBalanceUserToken1 = currency1.balanceOf(user1);
         console.log("newBalanceUserToken0: ", newBalanceUserToken0);
         console.log("newBalanceUserToken1: ", newBalanceUserToken1);
+
+       
+
+        //hook.withdrawAll(key);
+        
+        // Call function to determine the betting outcome
+        // Call function to claim the winnings
+       // hook.claimWinnings(key);
+
+         vm.stopPrank();
+        //
     }
 
    
@@ -205,7 +248,7 @@ contract SportsBettingHookTest is Test, Deployers {
     function getLMSRPrice() public {
         
             // Swap functionality here
-             vm.startPrank(user1);
+            // vm.startPrank(user1);
 
             // Determine price of token HomeWin based on LMSR
             
@@ -217,7 +260,7 @@ contract SportsBettingHookTest is Test, Deployers {
             // 3 users with different bets
             // tokenUsdc.approve(address(sportsBettingHook), amountInUser1);
             hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1);
-            
+            //hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1, address(user1));
             
             console.log("Bet amount user 1:", hook.betAmount());
             console.log("Initial cost :", hook.initialCost());   

@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {Currency} from "v4-core/types/Currency.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
@@ -17,6 +17,7 @@ import "forge-std/console.sol";
 
 contract SportsBettingHook is BaseHook {
     using CurrencySettler for Currency;
+    using CurrencyLibrary for Currency;
 
     uint256 public liquidityParameter = 500e18;
     enum Outcome { HOME_WINS, HOME_DRAW, HOME_LOSE }
@@ -50,12 +51,17 @@ contract SportsBettingHook is BaseHook {
 
     error AddLiquidityThroughHook();
 
+    
+
     struct CallbackData {
         uint256 amountEach;
         Currency currency0;
         Currency currency1;
         address sender;
     }
+
+
+
 
     constructor(IPoolManager poolManager) BaseHook(poolManager) {
             liquidity[Outcome.HOME_WINS] = 0;
@@ -112,6 +118,8 @@ contract SportsBettingHook is BaseHook {
         );
     }
 
+  
+
     function unlockCallback(
         bytes calldata data
     ) external onlyPoolManager returns (bytes memory) {
@@ -154,6 +162,7 @@ contract SportsBettingHook is BaseHook {
         return "";
     }
 
+
     // Swapping code
     function _beforeSwap(
         address,
@@ -162,6 +171,10 @@ contract SportsBettingHook is BaseHook {
         bytes calldata
     ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
     
+        // Store the address of the users who swap and place bets
+        // Important for keeping track of all the bets 
+        //address realUser = abi.decode(data, (address));
+        //console.log("Address realUser: ", realUser);
     //     BalanceDelta is a packed value of (currency0Amount, currency1Amount)
 
    
@@ -224,7 +237,9 @@ contract SportsBettingHook is BaseHook {
 
 
         // Call the function placeBet to determine the cost of the bet (in USDC)
+        // But during the hook call, msg.sender == poolManager, not the actual user (like user1).
         placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified));
+        //placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified), realUser);
         console.log("Cost of the bet: ", betCost);
 
        
@@ -255,6 +270,7 @@ contract SportsBettingHook is BaseHook {
         if (params.zeroForOne) {
             // Token0 = USDC, Token1 = WIN
             // User wants 200 WIN → pays betcost USDC
+            // Pull USDC from user, but assign claim to the HOOK (this contract) so use false
             key.currency0.take(poolManager, address(this), amountIn, true);     // user gives USDC
             key.currency1.settle(poolManager, address(this), amountOut, true);  // user gets WIN
         } else {
@@ -264,11 +280,18 @@ contract SportsBettingHook is BaseHook {
             key.currency0.settle(poolManager, address(this), amountOut, true); // user gets 200 WIN
         }
 
+        uint256 claimable = key.currency0.balanceOf(address(this)); // 
+        console.log("usdcClaimBalance: ", claimable);
+
+        //poolManager.mint(address(this), 1, 1e18);
+        // uint256 balance0 = poolManager.balanceOf(address(this), CurrencyLibrary.toId(currency0));
+        //key.currency0.take(poolManager, address(this), 10e18, true); // mint claim tokens
+
         return (this.beforeSwap.selector, beforeSwapDelta, 0);
     }
 
-     // Function to process the bets
-    // function placeBet(Outcome _outcome, uint256 _amount) external {
+    // Function to process the bets
+    //function placeBet(Outcome _outcome, uint256 _amount, address _user) public  {
     function placeBet(Outcome _outcome, uint256 _amount) public  {
         require(!matchSettled, "Betting is closed");
         require(_amount <= 2000e18, "Bet too large for liquidity");
@@ -283,15 +306,73 @@ contract SportsBettingHook is BaseHook {
         newCost = getMarketCost();
         betCost = newCost - initialCost;
 
+       
         // require(usdc.transferFrom(msg.sender, address(this), betCost), "USDC transfer failed");
         userBets[_outcome][msg.sender] += _amount;
-
+        //userBets[_outcome][_user] += _amount;
+        
         emit BetPlaced(msg.sender, _outcome, _amount, betCost);
+        //emit BetPlaced(_user, _outcome, _amount, betCost);
         // return newCost - initialCost;
     }
 
+    function claimWinnings(PoolKey calldata key) external {
 
-    // Get the market cost of a bet 
+        // Determine the winning outcome
+        Outcome winningOutcome;
+
+        outcomeIsWIN = true; //Temporary
+        matchSettled = true; //Temporary
+
+        require(matchSettled, "Not settled");
+
+          if (outcomeIsWIN) {
+            winningOutcome = Outcome.HOME_WINS;
+        } else if (outcomeIsLOSE) {
+            winningOutcome = Outcome.HOME_LOSE;
+        } else if (outcomeIsDRAW) {
+            winningOutcome = Outcome.HOME_DRAW;
+        } else {
+            revert("No outcome set yet");
+        }
+            
+        console.log("Address msg sender: ", msg.sender);  
+       console.log("winningOutcome: ", uint8(winningOutcome));
+     
+        uint256 userBet = userBets[winningOutcome][msg.sender];
+        require(userBet > 0, "No winnings to claim");
+
+        // Calculate total winnings pool
+        uint256 totalWinningBets = liquidity[winningOutcome];
+
+        uint256 balanceUSDCWinPool = key.currency0.balanceOf(address(this));
+        console.log("balanceUSDCWinPool: ", balanceUSDCWinPool);
+        //key.currency0.settle(poolManager, msg.sender, 4e18, false);
+        //key.currency0.settle(poolManager, msg.sender, 4e18, true);
+        // Calculate user share based on their bet proportion
+        uint256 prizePool = balanceUSDCWinPool;
+        uint256 userPrice = (userBet * prizePool) / totalWinningBets;
+        console.log("user Price: ", userPrice);
+
+        // Prevent reentrancy
+        userBets[winningOutcome][msg.sender] = 0;
+
+
+        uint256 userShares = userBets[winningOutcome][msg.sender];
+        require(userShares > 0, "Nothing to claim");
+
+        uint256 totalShares = liquidity[winningOutcome];
+
+        // Get USDC balance claimable by this hook
+        uint256 payout = (userShares * prizePool) / totalShares;
+
+        userBets[winningOutcome][msg.sender] = 0;
+
+        // Transfer USDC from PoolManager to winner
+        //key.currency0.settle(poolManager, msg.sender, payout, false);
+    }
+
+        // Get the market cost of a bet 
     function getMarketCost() public view returns (uint256) {
         uint256 expSum = this.expScaled(liquidity[Outcome.HOME_WINS]) +
                         this.expScaled(liquidity[Outcome.HOME_DRAW]) +
