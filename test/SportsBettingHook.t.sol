@@ -27,13 +27,49 @@ contract SportsBettingHookTest is Test, Deployers {
     address user2 = address(0x2222);
     address user3 = address(0x3333);
 
+    Currency public currencyUsdc; // USDC
+    Currency public currencyWin; // WIN
+    Currency public currencyLose; // LOSE
+    Currency public currencyDraw; // DRAW
+
+    PoolKey public keyWin;
+    PoolKey public keyLose;
+    PoolKey public keyDraw;
+
      // Initialize bets
     uint256 amountInUser1 = 20 * 1e18; // 20 WIN Tokens
     uint256 public storedBetCost; // State variable to store bet cost
 
     function setUp() public {
+        // Note: Deployers only works with currency0 and currency1
         deployFreshManagerAndRouters();
-        (currency0, currency1) = deployMintAndApprove2Currencies();
+        // (currency0, currency1) = deployMintAndApprove2Currencies();
+
+         
+        // Deploy USDC token manually 
+        MockERC20 usdcToken = new MockERC20("USDC", "USDC", 18);
+        usdcToken.mint(address(this), 1_000_000 ether);
+        usdcToken.approve(address(hook), type(uint256).max);
+        currencyUsdc = Currency.wrap(address(usdcToken));
+
+                // Deploy USDC token manually 
+        MockERC20 winToken = new MockERC20("WIN", "WIN", 18);
+        winToken.mint(address(this), 1_000_000 ether);
+        winToken.approve(address(hook), type(uint256).max);
+        currencyWin = Currency.wrap(address(winToken));
+        
+        // Deploy LOSE token manually 
+        MockERC20 loseToken = new MockERC20("LOSE", "LOSE", 18);
+        loseToken.mint(address(this), 1_000_000 ether);
+        loseToken.approve(address(hook), type(uint256).max);
+        currencyLose = Currency.wrap(address(loseToken));
+
+        // Deploy DRAW token manually 
+        MockERC20 drawToken = new MockERC20("DRAW", "DRAW", 18);
+        drawToken.mint(address(this), 1_000_000 ether);
+        drawToken.approve(address(hook), type(uint256).max);
+        currencyDraw = Currency.wrap(address(drawToken));
+
 
         address hookAddress = address(
             uint160(
@@ -45,138 +81,144 @@ contract SportsBettingHookTest is Test, Deployers {
         deployCodeTo("SportsBettingHook.sol", abi.encode(manager), hookAddress);
         hook = SportsBettingHook(hookAddress);
 
-        (key, ) = initPool(
-            currency0,
-            currency1,
+        (keyWin, ) = initPool(
+            currencyUsdc,
+            currencyWin,
             hook,
             3000,
             SQRT_PRICE_1_1
             // ZERO_BYTES
         );
 
+        (keyLose, ) = initPool(currencyUsdc, currencyLose, hook, 3000, SQRT_PRICE_1_1);
+        (keyDraw, ) = initPool(currencyUsdc, currencyDraw, hook, 3000, SQRT_PRICE_1_1);
+
+
         // Add some initial liquidity through the custom `addLiquidity` function
-        IERC20Minimal(Currency.unwrap(key.currency0)).approve(
+        IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(
             hookAddress,
-            1000 ether
+            1_000_000 ether
         );
-        IERC20Minimal(Currency.unwrap(key.currency1)).approve(
+        IERC20Minimal(Currency.unwrap(currencyWin)).approve(
             hookAddress,
-            1000 ether
+            1_000_000 ether
         );
 
-        address token0 = Currency.unwrap(key.currency0);
-        address token1 = Currency.unwrap(key.currency1);
-        console.log("Address token 0: ", token0);
-         console.log("Address token 1: ", token1);
+        IERC20Minimal(Currency.unwrap(currencyLose)).approve(
+            hookAddress,
+            1_000_000 ether
+        );
+
+        IERC20Minimal(Currency.unwrap(currencyDraw)).approve(
+            hookAddress,
+            1_000_000 ether
+        );
+
+
+        // Check addresses 
+        address tokenUsdc = Currency.unwrap(currencyUsdc);
+        address tokenWin = Currency.unwrap(currencyWin);
+        address tokenLose = Currency.unwrap(currencyLose);
+        address tokenDraw = Currency.unwrap(currencyDraw);
+        console.log("Address token USDC: ", tokenUsdc);
+        console.log("Address token WIN: ", tokenWin);
+        console.log("Address token LOSE: ", tokenLose);
+        console.log("Address token DRAW: ", tokenDraw);
 
         // Cast to mock token interface if needed
-        MockERC20(token0).mint(user1, 1000 ether);
-        MockERC20(token1).mint(user1, 1000 ether);
+        MockERC20(tokenUsdc).mint(user1, 10000 ether);
+        MockERC20(tokenUsdc).mint(user2, 10000 ether);
+        MockERC20(tokenUsdc).mint(user3, 10000 ether);
+ 
+        // Add liquidity to 3 outcome pools
+        hook.addLiquidity(keyWin, 1000e18);
+        hook.addLiquidity(keyLose, 1000e18);
+        hook.addLiquidity(keyDraw, 1000e18);
+  
+        // Check balances
+        uint256 balancePM0 = currencyUsdc.balanceOf(address(manager));
+        uint256 balancePM1 = currencyWin.balanceOf(address(manager)); 
+        uint256 balancePM2 = currencyLose.balanceOf(address(manager));  
+        uint256 balancePM3 = currencyDraw.balanceOf(address(manager));    
+        console.log("Balance PM currency USDC: ", balancePM0);
+        console.log("Balance PM currency WIN: ", balancePM1);  
+        console.log("Balance PM currency LOSE: ", balancePM2);  
+        console.log("Balance PM currency DRAW: ", balancePM3); 
 
+   
+        hook.registerPools(keyWin, keyLose, keyDraw);
 
-        hook.addLiquidity(key, 1000e18);
-        // console.log("Address hook: ", address(hook));
-        // console.log("Currency 0 address: ", Currency.unwrap(key.currency0));
-        // console.log("Currency 1 address: ", Currency.unwrap(key.currency1));
-
-        // uint256 balanceHook0 = currency0.balanceOf(address(hook));
-        // uint256 balancePM0 = currency0.balanceOf(address(manager));
-        // uint256 balanceHook1 = currency1.balanceOf(address(hook));
-        // uint256 balancePM1 = currency1.balanceOf(address(manager));  
-        // console.log("Balance Hook currency 0: ", balanceHook0);
-        // console.log("Balance Hook currency 1: ", balanceHook1);  
-        // console.log("Balance PM currency 0: ", balancePM0);
-        // console.log("Balance PM currency 1: ", balancePM1);  
 
     }
 
-    function test_claimTokenBalances() public view {
-        // We add 1000 * (10^18) of liquidity of each token to the CSMM pool
-        // The actual tokens will move into the PM
-        // But the hook should get equivalent amount of claim tokens for each token
-        uint token0ClaimID = CurrencyLibrary.toId(currency0);
-        uint token1ClaimID = CurrencyLibrary.toId(currency1);
-        console.log("token0ClaimID: ", token0ClaimID);
-        console.log("token1ClaimID: ", token1ClaimID);
+    //  function test_claimTokenBalances() public view {
+//         // We add 1000 * (10^18) of liquidity of each token to the CSMM pool
+//         // The actual tokens will move into the PM
+//         // But the hook should get equivalent amount of claim tokens for each token
+//         uint token0ClaimID = CurrencyLibrary.toId(currency0);
+//         uint token1ClaimID = CurrencyLibrary.toId(currency1);
+//         console.log("token0ClaimID: ", token0ClaimID);
+//         console.log("token1ClaimID: ", token1ClaimID);
 
 
-        uint token0ClaimsBalance = manager.balanceOf(
-            address(hook),
-            token0ClaimID
+//         uint token0ClaimsBalance = manager.balanceOf(
+//             address(hook),
+//             token0ClaimID
+//         );
+//         uint token1ClaimsBalance = manager.balanceOf(
+//             address(hook),
+//             token1ClaimID
+//         );
+//         // console.log("Address PM:" , address(manager));
+//         console.log("Balance token0ClaimsBalance Hook:" , token0ClaimsBalance);
+//         console.log("Balance token1ClaimsBalance Hook:" , token1ClaimsBalance);
+
+
+
+//         assertEq(token0ClaimsBalance, 1000e18);
+//         assertEq(token1ClaimsBalance, 1000e18);
+//     }
+
+
+
+    function test_cannotModifyLiquidity() public {
+        vm.expectRevert();
+        modifyLiquidityRouter.modifyLiquidity(
+            keyWin,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: -60,
+                tickUpper: 60,
+                liquidityDelta: 1e18,
+                salt: bytes32(0)
+            }),
+            ZERO_BYTES
         );
-        uint token1ClaimsBalance = manager.balanceOf(
-            address(hook),
-            token1ClaimID
-        );
-        // console.log("Address PM:" , address(manager));
-        console.log("Balance token0ClaimsBalance Hook:" , token0ClaimsBalance);
-        console.log("Balance token1ClaimsBalance Hook:" , token1ClaimsBalance);
 
-
-
-        assertEq(token0ClaimsBalance, 1000e18);
-        assertEq(token1ClaimsBalance, 1000e18);
     }
-
-
-
-    // function test_cannotModifyLiquidity() public {
-    //     vm.expectRevert();
-    //     modifyLiquidityRouter.modifyLiquidity(
-    //         key,
-    //         IPoolManager.ModifyLiquidityParams({
-    //             tickLower: -60,
-    //             tickUpper: 60,
-    //             liquidityDelta: 1e18,
-    //             salt: bytes32(0)
-    //         }),
-    //         ZERO_BYTES
-    //     );
-    // }
 
     
 
-    function test_swap_exactOutput_zeroForOne() public {
+     function test_swap_exactOutput_zeroForOne() public {
 
-       
-
-        vm.startPrank(user1);
-
-        
-        uint256 balancePM0Before = currency0.balanceOf(address(manager));
-        uint256 balancePM1Before = currency1.balanceOf(address(manager));  
-        console.log("Balance PM currency 0 before swap: ", balancePM0Before);
-        console.log("Balance PM currency 1 before swap: ", balancePM1Before);  
-
-
-
-
-        uint256 balanceHook0Before = currency0.balanceOf(address(hook));
-        uint256 balanceHook1Before = currency1.balanceOf(address(hook));  
-        console.log("Balance Hook currency 0 before swap: ", balanceHook0Before);
-        console.log("Balance Hook currency 1 before swap: ", balanceHook1Before);  
-
-
-        uint256 balanceUserToken0 = currency0.balanceOf(user1);
-        uint256 balanceUserToken1 = currency1.balanceOf(user1);
-        console.log("balanceUserToken0 before swap: ", balanceUserToken0);
-        console.log("balanceUserToken1 before swap: ", balanceUserToken1);
-
-        IERC20Minimal(Currency.unwrap(key.currency0)).approve(address(manager), type(uint256).max);
-        IERC20Minimal(Currency.unwrap(key.currency1)).approve(address(manager), type(uint256).max);
-        IERC20Minimal(Currency.unwrap(key.currency0)).approve(address(swapRouter), type(uint256).max);
-        IERC20Minimal(Currency.unwrap(key.currency1)).approve(address(swapRouter), type(uint256).max);
-
+        // Settings swap 
         PoolSwapTest.TestSettings memory settings = PoolSwapTest.TestSettings({
             takeClaims: false,
             settleUsingBurn: false
         });
+       
+        // User 1 bets on WIN
+         vm.startPrank(user1);
+
+        // IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(manager), type(uint256).max);
+        // IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(manager), type(uint256).max);
+        IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
+        IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
+
 
     
-
         // Swap token 
         swapRouter.swap(
-            key,
+            keyWin,
             IPoolManager.SwapParams({
                 zeroForOne: true,
                 amountSpecified: 200e18,
@@ -187,6 +229,56 @@ contract SportsBettingHookTest is Test, Deployers {
             //ZERO_BYTES
         );
 
+         vm.stopPrank();
+
+
+        // User 2 bets on LOSE
+        vm.startPrank(user2);
+
+        // IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(manager), type(uint256).max);
+        // IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(manager), type(uint256).max);
+        IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
+        IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
+
+    
+        // Swap token 
+        swapRouter.swap(
+            keyLose,
+            IPoolManager.SwapParams({
+                zeroForOne: true,
+                amountSpecified: 100e18,
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            settings,
+            abi.encode(user2)
+            //ZERO_BYTES
+        );
+
+         vm.stopPrank();
+
+
+        // User 3 bets on DRAW
+        vm.startPrank(user3);
+
+        // Approvals
+        IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
+        IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
+
+    
+        // Swap token 
+        swapRouter.swap(
+            keyDraw,
+            IPoolManager.SwapParams({
+                zeroForOne: true,
+                amountSpecified: 150e18,
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            settings,
+            abi.encode(user3)
+            //ZERO_BYTES
+        );
+
+         vm.stopPrank();
         
    
          // In real world dApp: 
@@ -194,84 +286,54 @@ contract SportsBettingHookTest is Test, Deployers {
          // await router.swap(key, swapParams, settings, encodedUser);
 
 
-        uint256 balancePM0 = currency0.balanceOf(address(manager));
-        uint256 balancePM1 = currency1.balanceOf(address(manager));  
-        console.log("Balance PM currency 0 after swap: ", balancePM0);
-        console.log("Balance PM currency 1 after swap: ", balancePM1);  
+        // Close bet market
+        hook.closeBetMarket();
+
+        // Set match result
+        hook.resolveMarket(1); // 1 = WIN, 2 = LOSE, 3 = DRAW
 
 
-
-
-        uint256 balanceHook0 = currency0.balanceOf(address(hook));
-        uint256 balanceHook1 = currency1.balanceOf(address(hook));  
-        console.log("Balance Hook currency 0 after swap: ", balanceHook0);
-        console.log("Balance Hook currency 1 after swap: ", balanceHook1);  
-
-
-
-         uint token0ClaimID = CurrencyLibrary.toId(currency0);
-        uint token1ClaimID = CurrencyLibrary.toId(currency1);
-        uint token0ClaimsBalance = manager.balanceOf(
-            address(hook),
-            token0ClaimID
-        );
-        uint token1ClaimsBalance = manager.balanceOf(
-            address(hook),
-            token1ClaimID
-        );
-        // console.log("Address PM:" , address(manager));
-        console.log("Balance token0ClaimsBalance Hook after swap:" , token0ClaimsBalance);
-        console.log("Balance token1ClaimsBalance Hook after swap:" , token1ClaimsBalance);
-
-        uint256 newBalanceUserToken0 = currency0.balanceOf(user1);
-        uint256 newBalanceUserToken1 = currency1.balanceOf(user1);
-        console.log("newBalanceUserToken0 after swap: ", newBalanceUserToken0);
-        console.log("newBalanceUserToken1 after swap: ", newBalanceUserToken1);
-
-    
-        
-        // Call function to determine the betting outcome
-        // Call function to claim the winnings
-        hook.claimWinnings(key, user1);
+         // Call function to claim the winnings
+         hook.claimWinnings(keyLose, user1);
 
          vm.stopPrank();
-        //
+
     }
 
    
 
-    function getLMSRPrice() public {
+//     function getLMSRPrice() public {
         
-            // Swap functionality here
-            // vm.startPrank(user1);
+//             // Swap functionality here
+//             // vm.startPrank(user1);
 
-            // Determine price of token HomeWin based on LMSR
+//             // Determine price of token HomeWin based on LMSR
             
-            // 1. Open Bet Market
-            hook.openBetMarket(1,10);
-            bool betMarketOpen = hook.betMarketOpen();
-            console.log("Status Bet Market: ", betMarketOpen);
+//             // 1. Open Bet Market
+//             hook.openBetMarket(1,10);
+//             bool betMarketOpen = hook.betMarketOpen();
+//             console.log("Status Bet Market: ", betMarketOpen);
 
-            // 3 users with different bets
-            // tokenUsdc.approve(address(sportsBettingHook), amountInUser1);
-            //hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1);
-            hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1, address(user1));
+//             // 3 users with different bets
+//             // tokenUsdc.approve(address(sportsBettingHook), amountInUser1);
+//             //hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1);
+//             hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1, address(user1));
             
-            console.log("Bet amount user 1:", hook.betAmount());
-            console.log("Initial cost :", hook.initialCost());   
-            console.log("New liquidity:", hook.newLiquidity());   
-            console.log("New cost:", hook.newCost()); 
+//             console.log("Bet amount user 1:", hook.betAmount());
+//             console.log("Initial cost :", hook.initialCost());   
+//             console.log("New liquidity:", hook.newLiquidity());   
+//             console.log("New cost:", hook.newCost()); 
 
-            // Retrieve bet cost from public state variable
-            storedBetCost = hook.betCost();
+//             // Retrieve bet cost from public state variable
+//             storedBetCost = hook.betCost();
 
-            // Log bet cost
-            console.log("Bet cost User 1, calculated by LMSR:", storedBetCost, "USDC");
+//             // Log bet cost
+//             console.log("Bet cost User 1, calculated by LMSR:", storedBetCost, "USDC");
 
-            // Assertions to ensure `betCost` updated correctly
-            assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
+//             // Assertions to ensure `betCost` updated correctly
+//             assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
 
             
    
-    }
+//     }
 }

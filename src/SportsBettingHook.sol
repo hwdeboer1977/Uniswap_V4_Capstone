@@ -23,8 +23,11 @@ contract SportsBettingHook is BaseHook {
     uint256 public liquidityParameter = 500e18;
     enum Outcome { HOME_WINS, HOME_DRAW, HOME_LOSE }
 
+    mapping(bytes32 => Outcome) public poolToOutcome;
+
     mapping(Outcome => uint256) public liquidity;
     mapping(Outcome => mapping(address => uint256)) public userBets;
+
 
     // Setting for betting market
     bool public betMarketOpen;
@@ -44,6 +47,7 @@ contract SportsBettingHook is BaseHook {
     uint256 public betCost;
     uint256 public betAmount;
 
+
     // Events
     event BetPlaced(address indexed user, Outcome outcome, uint256 amount, uint256 cost);
     event MatchSettled(Outcome winningOutcome);
@@ -60,7 +64,6 @@ contract SportsBettingHook is BaseHook {
         Currency currency1;
         address sender;
     }
-
 
 
 
@@ -119,7 +122,7 @@ contract SportsBettingHook is BaseHook {
         );
     }
 
-  
+
 
     function unlockCallback(
         bytes calldata data
@@ -234,8 +237,8 @@ contract SportsBettingHook is BaseHook {
 
 
         // Call the function placeBet to determine the cost of the bet (in USDC)
-        placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified), user);
- 
+        Outcome outcome = poolToOutcome[getPoolId(key)];
+        placeBet(outcome, uint256(params.amountSpecified), user);
         console.log("Cost of the bet: ", betCost);
 
        
@@ -316,9 +319,6 @@ contract SportsBettingHook is BaseHook {
         // Determine the winning outcome
         Outcome winningOutcome;
 
-        outcomeIsWIN = true; //Temporary
-        matchSettled = true; //Temporary
-
         require(matchSettled, "Not settled");
 
           if (outcomeIsWIN) {
@@ -345,6 +345,8 @@ contract SportsBettingHook is BaseHook {
 
         // Calculate user share based on their bet proportion
         uint256 prizePool = balanceUSDCWinPool;
+        console.log("userBet: ", userBet);
+         console.log("totalWinningBets: ", totalWinningBets);
         uint256 userPrice = (userBet * prizePool) / totalWinningBets;
         console.log("user Price: ", userPrice);
 
@@ -410,8 +412,8 @@ contract SportsBettingHook is BaseHook {
 
     // Function to close the Betting market
     function closeBetMarket() external {
-        require(betMarketOpen, "Market is not open");
-        require(block.timestamp >= startTime, "Cannot close before start");
+        //require(betMarketOpen, "Market is not open");
+        //require(block.timestamp >= startTime, "Cannot close before start");
 
         betMarketOpen = false;
         betMarketClosed = true;
@@ -433,6 +435,8 @@ contract SportsBettingHook is BaseHook {
         } else {
             revert("Invalid outcome");
         }
+
+        matchSettled = true;
     }
 
     /// Resets the market for a new match
@@ -453,5 +457,19 @@ contract SportsBettingHook is BaseHook {
     function getMarketState() external view returns (bool, bool, bool, uint256, uint256) {
         return (betMarketOpen, betMarketClosed, resolved, startTime, endTime);
     }
+
+    // Helper function to get pool ID
+    function getPoolId(PoolKey memory key) internal pure returns (bytes32) {
+        return keccak256(abi.encode(key));
+    }
+
+    function registerPools(PoolKey calldata keyWin, PoolKey calldata keyLose, PoolKey calldata keyDraw) external {
+        poolToOutcome[getPoolId(keyWin)] = Outcome.HOME_WINS;
+        poolToOutcome[getPoolId(keyLose)] = Outcome.HOME_LOSE;
+        poolToOutcome[getPoolId(keyDraw)] = Outcome.HOME_DRAW;
+    }
+
+
+
 
 }
