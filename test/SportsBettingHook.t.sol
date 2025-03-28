@@ -228,14 +228,11 @@ contract SportsBettingHookTest is Test, Deployers {
         console.log("newBalanceUserToken0 after swap: ", newBalanceUserToken0);
         console.log("newBalanceUserToken1 after swap: ", newBalanceUserToken1);
 
-       
-
-        // Trigger the payout from the hook
-       hook.sendUSDCToWinner(key, user1);
+    
         
         // Call function to determine the betting outcome
         // Call function to claim the winnings
-        //hook.claimWinnings(key, user1);
+        hook.claimWinnings(key, user1);
 
          vm.stopPrank();
         //

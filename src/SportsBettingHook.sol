@@ -164,32 +164,17 @@ contract SportsBettingHook is BaseHook {
     }
 
 
-    // Swapping code
-    // function _beforeSwap(
-    //     address,
-    //     PoolKey calldata key,
-    //     IPoolManager.SwapParams calldata params,
-    //     bytes calldata
-    // ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
-
+    // BeforeSwap hook logic
     function _beforeSwap(
         address,
         PoolKey calldata key,
         IPoolManager.SwapParams calldata params,
         bytes calldata data
     ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
-        address user = abi.decode(data, (address)); // user who placed the bet
+        address user = abi.decode(data, (address));    // Store the address of the users who swap and place bets
        
-    
-    
-        
-        // Store the address of the users who swap and place bets
-        // Important for keeping track of all the bets 
-        //address realUser = abi.decode(data, (address));
-        //console.log("Address realUser: ", realUser);
+  
     //     BalanceDelta is a packed value of (currency0Amount, currency1Amount)
-
-   
 
     //     Specified Currency => The currency in which the user is specifying the amount they're swapping for
     //     Unspecified Currency => The other currency
@@ -249,9 +234,7 @@ contract SportsBettingHook is BaseHook {
 
 
         // Call the function placeBet to determine the cost of the bet (in USDC)
-        // But during the hook call, msg.sender == poolManager, not the actual user (like user1).
-        //placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified));
-         placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified), user);
+        placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified), user);
  
         console.log("Cost of the bet: ", betCost);
 
@@ -288,9 +271,6 @@ contract SportsBettingHook is BaseHook {
             key.currency1.settle(poolManager, address(this), amountOut, true);  // user gets WIN
 
             // Balances inside this _beforeSwap() are not updated directly
- 
-
-
 
         } else {
             // User wants 100 USDC → pays 200 WIN (reverse direction)
@@ -302,22 +282,10 @@ contract SportsBettingHook is BaseHook {
         uint256 claimable = key.currency0.balanceOf(address(this)); // 
         console.log("usdcClaimBalance: ", claimable);
 
-        //poolManager.mint(address(this), 1, 1e18);
-        // uint256 balance0 = poolManager.balanceOf(address(this), CurrencyLibrary.toId(currency0));
-        //key.currency0.take(poolManager, address(this), 10e18, true); // mint claim tokens
 
         return (this.beforeSwap.selector, beforeSwapDelta, 0);
     }
 
-    function sendUSDCToWinner(PoolKey calldata key, address user1) external {
-        uint256 balanceUSDCWinPool = key.currency0.balanceOf(address(this));
-        console.log("balanceUSDCWinPool: ", balanceUSDCWinPool);
-
-        require(balanceUSDCWinPool > 0, "Nothing to send");
-
-        IERC20Minimal(Currency.unwrap(key.currency0)).transfer(user1, balanceUSDCWinPool);
-
-    }
 
     // Function to process the bets
     function placeBet(Outcome _outcome, uint256 _amount, address _user) public  {
@@ -335,15 +303,12 @@ contract SportsBettingHook is BaseHook {
         newCost = getMarketCost();
         betCost = newCost - initialCost;
 
-       
-        // require(usdc.transferFrom(msg.sender, address(this), betCost), "USDC transfer failed");
-        //userBets[_outcome][msg.sender] += _amount;
+
         console.log("User's address: ", _user);
         userBets[_outcome][_user] += _amount;
         
         emit BetPlaced(_user, _outcome, _amount, betCost);
-        //emit BetPlaced(_user, _outcome, _amount, betCost);
-        // return newCost - initialCost;
+
     }
 
     function claimWinnings(PoolKey calldata key, address _user) external {
@@ -377,8 +342,7 @@ contract SportsBettingHook is BaseHook {
 
         uint256 balanceUSDCWinPool = key.currency0.balanceOf(address(this));
         console.log("balanceUSDCWinPool: ", balanceUSDCWinPool);
-        //key.currency0.settle(poolManager, msg.sender, 4e18, false);
-        //key.currency0.settle(poolManager, msg.sender, 4e18, true);
+
         // Calculate user share based on their bet proportion
         uint256 prizePool = balanceUSDCWinPool;
         uint256 userPrice = (userBet * prizePool) / totalWinningBets;
@@ -395,10 +359,12 @@ contract SportsBettingHook is BaseHook {
 
         console.log("Payout:" , payout);
 
+        require(payout > 0, "Nothing to send");
+
+        IERC20Minimal(Currency.unwrap(key.currency0)).transfer(_user, payout);
+
         userBets[winningOutcome][_user] = 0;
 
-        // Transfer USDC from PoolManager to winner
-        //key.currency0.settle(poolManager, msg.sender, payout, false);
     }
 
     // Get the market cost of a bet 
