@@ -10,6 +10,7 @@ import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.
 import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
 import { UD60x18, ud } from "prb-math/UD60x18.sol";
 import "forge-std/console.sol";
+import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
 // We use a custom pricing curve LMSR instead of the invariant `x * y = k`
 // We follow the example CSMM by Atrium Academy
@@ -164,13 +165,24 @@ contract SportsBettingHook is BaseHook {
 
 
     // Swapping code
+    // function _beforeSwap(
+    //     address,
+    //     PoolKey calldata key,
+    //     IPoolManager.SwapParams calldata params,
+    //     bytes calldata
+    // ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
+
     function _beforeSwap(
         address,
         PoolKey calldata key,
         IPoolManager.SwapParams calldata params,
-        bytes calldata
+        bytes calldata data
     ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
+        address user = abi.decode(data, (address)); // user who placed the bet
+       
     
+    
+        
         // Store the address of the users who swap and place bets
         // Important for keeping track of all the bets 
         //address realUser = abi.decode(data, (address));
@@ -238,8 +250,9 @@ contract SportsBettingHook is BaseHook {
 
         // Call the function placeBet to determine the cost of the bet (in USDC)
         // But during the hook call, msg.sender == poolManager, not the actual user (like user1).
-        placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified));
-        //placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified), realUser);
+        //placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified));
+         placeBet(Outcome.HOME_WINS, uint256(params.amountSpecified), user);
+ 
         console.log("Cost of the bet: ", betCost);
 
        
@@ -271,8 +284,14 @@ contract SportsBettingHook is BaseHook {
             // Token0 = USDC, Token1 = WIN
             // User wants 200 WIN → pays betcost USDC
             // Pull USDC from user, but assign claim to the HOOK (this contract) so use false
-            key.currency0.take(poolManager, address(this), amountIn, true);     // user gives USDC
+            key.currency0.take(poolManager, address(this), amountIn, false);     // user gives USDC
             key.currency1.settle(poolManager, address(this), amountOut, true);  // user gets WIN
+
+            // Balances inside this _beforeSwap() are not updated directly
+ 
+
+
+
         } else {
             // User wants 100 USDC → pays 200 WIN (reverse direction)
 
@@ -290,9 +309,19 @@ contract SportsBettingHook is BaseHook {
         return (this.beforeSwap.selector, beforeSwapDelta, 0);
     }
 
+    function sendUSDCToWinner(PoolKey calldata key, address user1) external {
+        uint256 balanceUSDCWinPool = key.currency0.balanceOf(address(this));
+        console.log("balanceUSDCWinPool: ", balanceUSDCWinPool);
+
+        require(balanceUSDCWinPool > 0, "Nothing to send");
+
+        IERC20Minimal(Currency.unwrap(key.currency0)).transfer(user1, balanceUSDCWinPool);
+
+    }
+
     // Function to process the bets
-    //function placeBet(Outcome _outcome, uint256 _amount, address _user) public  {
-    function placeBet(Outcome _outcome, uint256 _amount) public  {
+    function placeBet(Outcome _outcome, uint256 _amount, address _user) public  {
+    //function placeBet(Outcome _outcome, uint256 _amount) public  {
         require(!matchSettled, "Betting is closed");
         require(_amount <= 2000e18, "Bet too large for liquidity");
 
@@ -308,15 +337,16 @@ contract SportsBettingHook is BaseHook {
 
        
         // require(usdc.transferFrom(msg.sender, address(this), betCost), "USDC transfer failed");
-        userBets[_outcome][msg.sender] += _amount;
-        //userBets[_outcome][_user] += _amount;
+        //userBets[_outcome][msg.sender] += _amount;
+        console.log("User's address: ", _user);
+        userBets[_outcome][_user] += _amount;
         
-        emit BetPlaced(msg.sender, _outcome, _amount, betCost);
+        emit BetPlaced(_user, _outcome, _amount, betCost);
         //emit BetPlaced(_user, _outcome, _amount, betCost);
         // return newCost - initialCost;
     }
 
-    function claimWinnings(PoolKey calldata key) external {
+    function claimWinnings(PoolKey calldata key, address _user) external {
 
         // Determine the winning outcome
         Outcome winningOutcome;
@@ -336,10 +366,10 @@ contract SportsBettingHook is BaseHook {
             revert("No outcome set yet");
         }
             
-        console.log("Address msg sender: ", msg.sender);  
-       console.log("winningOutcome: ", uint8(winningOutcome));
      
-        uint256 userBet = userBets[winningOutcome][msg.sender];
+        console.log("winningOutcome: ", uint8(winningOutcome));
+     
+        uint256 userBet = userBets[winningOutcome][_user];
         require(userBet > 0, "No winnings to claim");
 
         // Calculate total winnings pool
@@ -354,11 +384,8 @@ contract SportsBettingHook is BaseHook {
         uint256 userPrice = (userBet * prizePool) / totalWinningBets;
         console.log("user Price: ", userPrice);
 
-        // Prevent reentrancy
-        userBets[winningOutcome][msg.sender] = 0;
 
-
-        uint256 userShares = userBets[winningOutcome][msg.sender];
+        uint256 userShares = userBets[winningOutcome][_user];
         require(userShares > 0, "Nothing to claim");
 
         uint256 totalShares = liquidity[winningOutcome];
@@ -366,13 +393,15 @@ contract SportsBettingHook is BaseHook {
         // Get USDC balance claimable by this hook
         uint256 payout = (userShares * prizePool) / totalShares;
 
-        userBets[winningOutcome][msg.sender] = 0;
+        console.log("Payout:" , payout);
+
+        userBets[winningOutcome][_user] = 0;
 
         // Transfer USDC from PoolManager to winner
         //key.currency0.settle(poolManager, msg.sender, payout, false);
     }
 
-        // Get the market cost of a bet 
+    // Get the market cost of a bet 
     function getMarketCost() public view returns (uint256) {
         uint256 expSum = this.expScaled(liquidity[Outcome.HOME_WINS]) +
                         this.expScaled(liquidity[Outcome.HOME_DRAW]) +

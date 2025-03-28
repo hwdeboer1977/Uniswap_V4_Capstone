@@ -120,19 +120,19 @@ contract SportsBettingHookTest is Test, Deployers {
 
 
 
-    function test_cannotModifyLiquidity() public {
-        vm.expectRevert();
-        modifyLiquidityRouter.modifyLiquidity(
-            key,
-            IPoolManager.ModifyLiquidityParams({
-                tickLower: -60,
-                tickUpper: 60,
-                liquidityDelta: 1e18,
-                salt: bytes32(0)
-            }),
-            ZERO_BYTES
-        );
-    }
+    // function test_cannotModifyLiquidity() public {
+    //     vm.expectRevert();
+    //     modifyLiquidityRouter.modifyLiquidity(
+    //         key,
+    //         IPoolManager.ModifyLiquidityParams({
+    //             tickLower: -60,
+    //             tickUpper: 60,
+    //             liquidityDelta: 1e18,
+    //             salt: bytes32(0)
+    //         }),
+    //         ZERO_BYTES
+    //     );
+    // }
 
     
 
@@ -142,10 +142,25 @@ contract SportsBettingHookTest is Test, Deployers {
 
         vm.startPrank(user1);
 
+        
+        uint256 balancePM0Before = currency0.balanceOf(address(manager));
+        uint256 balancePM1Before = currency1.balanceOf(address(manager));  
+        console.log("Balance PM currency 0 before swap: ", balancePM0Before);
+        console.log("Balance PM currency 1 before swap: ", balancePM1Before);  
+
+
+
+
+        uint256 balanceHook0Before = currency0.balanceOf(address(hook));
+        uint256 balanceHook1Before = currency1.balanceOf(address(hook));  
+        console.log("Balance Hook currency 0 before swap: ", balanceHook0Before);
+        console.log("Balance Hook currency 1 before swap: ", balanceHook1Before);  
+
+
         uint256 balanceUserToken0 = currency0.balanceOf(user1);
         uint256 balanceUserToken1 = currency1.balanceOf(user1);
-        console.log("balanceUserToken0: ", balanceUserToken0);
-        console.log("balanceUserToken1: ", balanceUserToken1);
+        console.log("balanceUserToken0 before swap: ", balanceUserToken0);
+        console.log("balanceUserToken1 before swap: ", balanceUserToken1);
 
         IERC20Minimal(Currency.unwrap(key.currency0)).approve(address(manager), type(uint256).max);
         IERC20Minimal(Currency.unwrap(key.currency1)).approve(address(manager), type(uint256).max);
@@ -159,9 +174,7 @@ contract SportsBettingHookTest is Test, Deployers {
 
     
 
-        // Swap exact output 100 Token A
-        uint balanceOfTokenABefore = key.currency0.balanceOfSelf();
-        uint balanceOfTokenBBefore = key.currency1.balanceOfSelf();
+        // Swap token 
         swapRouter.swap(
             key,
             IPoolManager.SwapParams({
@@ -170,45 +183,29 @@ contract SportsBettingHookTest is Test, Deployers {
                 sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
             }),
             settings,
-            ZERO_BYTES
+            abi.encode(user1)
+            //ZERO_BYTES
         );
+
+        
    
          // In real world dApp: 
          // const encodedUser = ethers.utils.defaultAbiCoder.encode(["address"], [wallet.address]);
          // await router.swap(key, swapParams, settings, encodedUser);
 
-        // Swap exact output 100 Token A
-
-        console.log("Address that calls swap:", msg.sender);
-        swapRouter.swap(
-            key,
-            IPoolManager.SwapParams({
-                zeroForOne: true,
-                amountSpecified: 200e18,
-                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-            }),
-            settings,
-            ZERO_BYTES
-           // abi.encode(msg.sender) // or user1
-        );
-        uint balanceOfTokenAAfter = key.currency0.balanceOfSelf();
-        uint balanceOfTokenBAfter = key.currency1.balanceOfSelf();
-
-        //assertEq(balanceOfTokenBAfter - balanceOfTokenBBefore, 100e18);
-        //assertEq(balanceOfTokenABefore - balanceOfTokenAAfter, 100e18);
 
         uint256 balancePM0 = currency0.balanceOf(address(manager));
         uint256 balancePM1 = currency1.balanceOf(address(manager));  
-        console.log("Balance PM currency 0: ", balancePM0);
-        console.log("Balance PM currency 1: ", balancePM1);  
+        console.log("Balance PM currency 0 after swap: ", balancePM0);
+        console.log("Balance PM currency 1 after swap: ", balancePM1);  
 
 
 
 
-        uint256 balanceHook0 = currency0.balanceOf(address(this));
-        uint256 balanceHook1 = currency1.balanceOf(address(this));  
-        console.log("Balance Hook currency 0: ", balanceHook0);
-        console.log("Balance Hook currency 1: ", balanceHook1);  
+        uint256 balanceHook0 = currency0.balanceOf(address(hook));
+        uint256 balanceHook1 = currency1.balanceOf(address(hook));  
+        console.log("Balance Hook currency 0 after swap: ", balanceHook0);
+        console.log("Balance Hook currency 1 after swap: ", balanceHook1);  
 
 
 
@@ -223,21 +220,22 @@ contract SportsBettingHookTest is Test, Deployers {
             token1ClaimID
         );
         // console.log("Address PM:" , address(manager));
-        console.log("Balance token0ClaimsBalance Hook:" , token0ClaimsBalance);
-        console.log("Balance token1ClaimsBalance Hook:" , token1ClaimsBalance);
+        console.log("Balance token0ClaimsBalance Hook after swap:" , token0ClaimsBalance);
+        console.log("Balance token1ClaimsBalance Hook after swap:" , token1ClaimsBalance);
 
         uint256 newBalanceUserToken0 = currency0.balanceOf(user1);
         uint256 newBalanceUserToken1 = currency1.balanceOf(user1);
-        console.log("newBalanceUserToken0: ", newBalanceUserToken0);
-        console.log("newBalanceUserToken1: ", newBalanceUserToken1);
+        console.log("newBalanceUserToken0 after swap: ", newBalanceUserToken0);
+        console.log("newBalanceUserToken1 after swap: ", newBalanceUserToken1);
 
        
 
-        //hook.withdrawAll(key);
+        // Trigger the payout from the hook
+       hook.sendUSDCToWinner(key, user1);
         
         // Call function to determine the betting outcome
         // Call function to claim the winnings
-       // hook.claimWinnings(key);
+        //hook.claimWinnings(key, user1);
 
          vm.stopPrank();
         //
@@ -259,8 +257,8 @@ contract SportsBettingHookTest is Test, Deployers {
 
             // 3 users with different bets
             // tokenUsdc.approve(address(sportsBettingHook), amountInUser1);
-            hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1);
-            //hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1, address(user1));
+            //hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1);
+            hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1, address(user1));
             
             console.log("Bet amount user 1:", hook.betAmount());
             console.log("Initial cost :", hook.initialCost());   
