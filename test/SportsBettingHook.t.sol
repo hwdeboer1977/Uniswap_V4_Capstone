@@ -147,10 +147,10 @@ contract SportsBettingHookTest is Test, Deployers {
         uint256 balancePM1 = currencyWin.balanceOf(address(manager)); 
         uint256 balancePM2 = currencyLose.balanceOf(address(manager));  
         uint256 balancePM3 = currencyDraw.balanceOf(address(manager));    
-        console.log("Balance PM currency USDC: ", balancePM0);
-        console.log("Balance PM currency WIN: ", balancePM1);  
-        console.log("Balance PM currency LOSE: ", balancePM2);  
-        console.log("Balance PM currency DRAW: ", balancePM3); 
+        console.log("Balance Pool Manager currency USDC: ", balancePM0/1e18);
+        console.log("Balance Pool Manager currency WIN: ", balancePM1/1e18);  
+        console.log("Balance Pool Manager currency LOSE: ", balancePM2/1e18);  
+        console.log("Balance Pool Manager currency DRAW: ", balancePM3/1e18); 
 
         // Map each pool key to its associated outcome
         hook.registerPools(keyWin, keyLose, keyDraw);
@@ -186,6 +186,10 @@ contract SportsBettingHookTest is Test, Deployers {
             settleUsingBurn: false
         });
        
+        // Open the betting market (runs for 7 days)
+        hook.openBetMarket(block.timestamp, block.timestamp + 7 days);
+
+
         // --- User 1 bets on WIN outcome ---
          vm.startPrank(user1);
 

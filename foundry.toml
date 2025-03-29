@@ -8,8 +8,6 @@ optimizer_runs = 800
 via_ir = true
 ffi = true
 
-[rpc_endpoints]
-sepolia = "https://eth-sepolia.g.alchemy.com/v2/eoDKFwWxqATc20dM_7bj2ZOuUD8bsHtk"
 
 [dotenv]
 path = ".env"

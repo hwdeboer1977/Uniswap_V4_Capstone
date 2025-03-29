@@ -247,7 +247,7 @@ contract SportsBettingHook is BaseHook {
         // Derive outcome for this pool and calculate bet cost
         Outcome outcome = poolToOutcome[getPoolId(key)];
         placeBet(outcome, uint256(params.amountSpecified), user);
-        console.log("Cost of the bet: ", betCost);
+        console.log("Cost of the bet: ", betCost/1e18);
 
        
         // Custom pricing example: user wants 200 WIN, pays 400 USDC
@@ -258,8 +258,8 @@ contract SportsBettingHook is BaseHook {
         int128 specifiedDelta = int128(-params.amountSpecified);              // -200 WIN
         int128 unspecifiedDelta = int128(int256(betCost)); // LMSR-computed cost
 
-        console.log("specifiedDelta:", specifiedDelta);
-        console.log("unspecifiedDelta:", unspecifiedDelta);
+        //console.log("specifiedDelta:", specifiedDelta);
+        //console.log("unspecifiedDelta:", unspecifiedDelta);
 
         // BeforeSwapDelta varies such that it is not sorted by token0 and token1
         // Instead, it is sorted by "specifiedCurrency" and "unspecifiedCurrency"
@@ -271,8 +271,8 @@ contract SportsBettingHook is BaseHook {
         // Convert int128 → int256 → uint256 safely
         uint256 amountIn = uint256(int256(unspecifiedDelta));      
         uint256 amountOut = uint256(int256(-specifiedDelta));      
-        console.log("amountIn:", amountIn);
-        console.log("amountOut:", amountOut);
+        console.log("amountIn:", amountIn/1e18);
+        console.log("amountOut:", amountOut/1e18);
 
         if (params.zeroForOne) {
             // Token0 = USDC, Token1 = WIN
@@ -291,7 +291,7 @@ contract SportsBettingHook is BaseHook {
         }
 
         uint256 claimable = key.currency0.balanceOf(address(this)); // 
-        console.log("usdcClaimBalance: ", claimable);
+        //console.log("usdcClaimBalance: ", claimable);
 
 
         return (this.beforeSwap.selector, beforeSwapDelta, 0);
@@ -350,14 +350,14 @@ contract SportsBettingHook is BaseHook {
         uint256 totalWinningBets = liquidity[winningOutcome];
 
         uint256 balanceUSDCWinPool = key.currency0.balanceOf(address(this));
-        console.log("balanceUSDCWinPool: ", balanceUSDCWinPool);
+        console.log("balanceUSDCWinPool: ", balanceUSDCWinPool/1e18);
 
         // Calculate user share based on their bet proportion
         uint256 prizePool = balanceUSDCWinPool;
-        console.log("userBet: ", userBet);
-         console.log("totalWinningBets: ", totalWinningBets);
+        console.log("userBet: ", userBet/1e18);
+         console.log("totalWinningBets: ", totalWinningBets/1e18);
         uint256 userPrice = (userBet * prizePool) / totalWinningBets;
-        console.log("user Price: ", userPrice);
+        console.log("user Price: ", userPrice/1e18);
 
 
         uint256 userShares = userBets[winningOutcome][_user];
@@ -368,7 +368,7 @@ contract SportsBettingHook is BaseHook {
         // Get USDC balance claimable by this hook
         uint256 payout = (userShares * prizePool) / totalShares;
 
-        console.log("Payout:" , payout);
+        console.log("Payout:" , payout/1e18);
 
         require(payout > 0, "Nothing to send");
 
@@ -423,8 +423,8 @@ contract SportsBettingHook is BaseHook {
 
     // Function to close the Betting market
     function closeBetMarket() external {
-        //require(betMarketOpen, "Market is not open");
-        //require(block.timestamp >= startTime, "Cannot close before start");
+        require(betMarketOpen, "Market is not open");
+        require(block.timestamp >= startTime, "Cannot close before start");
 
         betMarketOpen = false;
         betMarketClosed = true;
