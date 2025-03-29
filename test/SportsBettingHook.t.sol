@@ -189,6 +189,11 @@ contract SportsBettingHookTest is Test, Deployers {
         // --- User 1 bets on WIN outcome ---
          vm.startPrank(user1);
 
+         
+        // Store USDC balance before swap
+        uint256 user1UsdcBefore = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
+
+
         // Approve tokens
         IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
         IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
@@ -208,13 +213,22 @@ contract SportsBettingHookTest is Test, Deployers {
             //ZERO_BYTES
         );
 
+        // Check USDC was spent
+        uint256 user1UsdcAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
+        assertLt(user1UsdcAfter, user1UsdcBefore); // user spent USDC
+
+
          vm.stopPrank();
 
 
         // --- User 2 bets on LOSE outcome ---
         vm.startPrank(user2);
 
+        // Store USDC balance before swap
+        uint256 user2UsdcBefore = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user2);
 
+
+        // Approve tokens
         IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
         IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
 
@@ -232,11 +246,19 @@ contract SportsBettingHookTest is Test, Deployers {
             //ZERO_BYTES
         );
 
+        // Check balance after swap
+        uint256 user2UsdcAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user2);
+        assertLt(user2UsdcAfter, user2UsdcBefore);
+
          vm.stopPrank();
 
 
         // --- User 3 bets on DRAW outcome ---
         vm.startPrank(user3);
+
+        
+        // Store USDC balance before swap
+        uint256 user3UsdcBefore = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user3);
 
         // Approvals
         IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
@@ -256,6 +278,10 @@ contract SportsBettingHookTest is Test, Deployers {
             //ZERO_BYTES
         );
 
+        // Check balance after swap
+        uint256 user3UsdcAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user3);
+        assertLt(user3UsdcAfter, user3UsdcBefore);
+
          vm.stopPrank();
         
    
@@ -273,11 +299,38 @@ contract SportsBettingHookTest is Test, Deployers {
 
         hook.resolveMarket(1); // 1 = WIN, 2 = LOSE, 3 = DRAW
 
-         // Let user1 claim their winnings for the WIN pool
-         // Call function to claim the winnings
-         hook.claimWinnings(keyLose, user1);
+        // --- Payout: user1 claims winnings ---
+        uint256 user1ClaimBefore = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
+        hook.claimWinnings(keyWin, user1);
+        uint256 user1ClaimAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
 
-         vm.stopPrank();
+        // Assert that user1 received a payout
+        assertGt(user1ClaimAfter, user1ClaimBefore);
+
+        // Assert user1 can't claim again (should revert or no change)
+        vm.expectRevert("No winnings to claim");
+        hook.claimWinnings(keyWin, user1);
+
+        // --- User 2 tries to claim on LOSE (which was not the winning outcome) ---
+        uint256 user2ClaimBefore = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user2);
+
+        // Expect revert or no winnings
+        vm.expectRevert("No winnings to claim");
+        hook.claimWinnings(keyLose, user2);
+
+        uint256 user2ClaimAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user2);
+        assertEq(user2ClaimAfter, user2ClaimBefore); // No payout occurred
+
+        // --- User 3 tries to claim on DRAW ---
+        uint256 user3ClaimBefore = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user3);
+
+        vm.expectRevert("No winnings to claim");
+        hook.claimWinnings(keyDraw, user3);
+
+        uint256 user3ClaimAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user3);
+        assertEq(user3ClaimAfter, user3ClaimBefore); // No payout occurred
+
+        vm.stopPrank();
 
     }
 
