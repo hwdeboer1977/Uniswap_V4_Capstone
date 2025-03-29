@@ -1,5 +1,7 @@
 # Whitepaper: Decentralized Sports Betting Hook on Uniswap V4
 
+⚠️ Note: This implementation is not yet production-ready — oracle integration for automated match resolution is still in progress.
+
 ## Abstract
 
 This whitepaper introduces a decentralized sports betting mechanism integrated as a custom Uniswap V4 Hook, utilizing the Logarithmic Market Scoring Rule (LMSR) for dynamic probability-weighted pricing. The protocol enables users to bet on sports outcomes using USDC, routing liquidity into dedicated pools: USDC/HOME_WIN, USDC/HOME_LOSE, and USDC/HOME_DRAW.
