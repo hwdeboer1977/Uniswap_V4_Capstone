@@ -16,7 +16,7 @@ PM: Use external oracle services to fetch initial probabilities and finalize mat
 
 ### 2.1. Components
 
-- Uniswap V4 Hook: A smart contract that dynamically adjusts bet pricing and deposits funds into an LP.
+- Uniswap V4 Hook: A smart contract that dynamically adjusts bet pricing and deposits funds into 3 LPs: USDC/HOME_WIN, USDC/HOME_LOSE, and USDC/HOME_DRAW.
 - LMSR-Based Market Maker: Ensures that the price of each bet reflects its implied probability.
 - Automated Liquidity Routing: Redirects user deposits into the LP and withdraws when payouts are required.
 
