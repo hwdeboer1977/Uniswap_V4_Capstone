@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+// Importing necessary Uniswap V4 and utility modules
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
@@ -12,8 +13,8 @@ import { UD60x18, ud } from "prb-math/UD60x18.sol";
 import "forge-std/console.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 
-// We use a custom pricing curve LMSR instead of the invariant `x * y = k`
-// We follow the example CSMM by Atrium Academy
+// Implements LMSR (Logarithmic Market Scoring Rule) for pricing bets
+// Inspired by the Constant Sum Market Maker (CSMM) example by Atrium Academy
 // https://github.com/haardikk21/csmm-noop-hook/tree/main
 
 contract SportsBettingHook is BaseHook {
@@ -23,13 +24,17 @@ contract SportsBettingHook is BaseHook {
     uint256 public liquidityParameter = 500e18;
     enum Outcome { HOME_WINS, HOME_DRAW, HOME_LOSE }
 
+     // Mapping from pool ID to associated betting outcome
     mapping(bytes32 => Outcome) public poolToOutcome;
 
+     // Liquidity held for each outcome
     mapping(Outcome => uint256) public liquidity;
+
+    // Tracks each user's bets per outcome
     mapping(Outcome => mapping(address => uint256)) public userBets;
 
 
-    // Setting for betting market
+    // Market state variables
     bool public betMarketOpen;
     bool public betMarketClosed;
     bool public resolved;
@@ -40,7 +45,8 @@ contract SportsBettingHook is BaseHook {
     uint256 public endTime;
     bool public matchSettled;
 
-    // Temporary as public state variables
+    // Temporary public state variables used during swap logic
+    // Can be replaced in production (NOT gas efficient) 
     uint256 public initialCost;
     uint256 public newLiquidity;
     uint256 public newCost;
@@ -48,7 +54,7 @@ contract SportsBettingHook is BaseHook {
     uint256 public betAmount;
 
 
-    // Events
+    // Events for logging key contract activity
     event BetPlaced(address indexed user, Outcome outcome, uint256 amount, uint256 cost);
     event MatchSettled(Outcome winningOutcome);
     event PayoutClaimed(address user, uint256 userStake, uint256 totalPool, uint256 contractBalance, uint256 reward);
@@ -73,6 +79,7 @@ contract SportsBettingHook is BaseHook {
             liquidity[Outcome.HOME_LOSE] = 0;
     }
 
+     // Define the permissions for this hook
     function getHookPermissions()
         public
         pure
@@ -98,7 +105,7 @@ contract SportsBettingHook is BaseHook {
             });
     }
 
-    // Disable adding liquidity through the PM
+    // Prevent users from adding liquidity through default PM flow
     function _beforeAddLiquidity(
         address,
         PoolKey calldata,
@@ -108,7 +115,7 @@ contract SportsBettingHook is BaseHook {
         revert AddLiquidityThroughHook();
     }
 
-    // Custom add liquidity function
+    // Custom function to add liquidity using `unlock` mechanism
     function addLiquidity(PoolKey calldata key, uint256 amountEach) external {
         poolManager.unlock(
             abi.encode(
@@ -123,7 +130,7 @@ contract SportsBettingHook is BaseHook {
     }
 
 
-
+     // Callback executed during poolManager.unlock()
     function unlockCallback(
         bytes calldata data
     ) external onlyPoolManager returns (bytes memory) {
@@ -167,7 +174,7 @@ contract SportsBettingHook is BaseHook {
     }
 
 
-    // BeforeSwap hook logic
+    // Custom swap handler using LMSR pricing logic
     function _beforeSwap(
         address,
         PoolKey calldata key,
@@ -237,6 +244,7 @@ contract SportsBettingHook is BaseHook {
 
 
         // Call the function placeBet to determine the cost of the bet (in USDC)
+        // Derive outcome for this pool and calculate bet cost
         Outcome outcome = poolToOutcome[getPoolId(key)];
         placeBet(outcome, uint256(params.amountSpecified), user);
         console.log("Cost of the bet: ", betCost);
@@ -290,7 +298,7 @@ contract SportsBettingHook is BaseHook {
     }
 
 
-    // Function to process the bets
+    // Main function to place bets into an outcome
     function placeBet(Outcome _outcome, uint256 _amount, address _user) public  {
     //function placeBet(Outcome _outcome, uint256 _amount) public  {
         require(!matchSettled, "Betting is closed");
@@ -314,6 +322,7 @@ contract SportsBettingHook is BaseHook {
 
     }
 
+     // Claim winnings after match is resolved
     function claimWinnings(PoolKey calldata key, address _user) external {
 
         // Determine the winning outcome
@@ -363,13 +372,15 @@ contract SportsBettingHook is BaseHook {
 
         require(payout > 0, "Nothing to send");
 
+        userBets[winningOutcome][_user] = 0;
+
         IERC20Minimal(Currency.unwrap(key.currency0)).transfer(_user, payout);
 
-        userBets[winningOutcome][_user] = 0;
+        
 
     }
 
-    // Get the market cost of a bet 
+     // LMSR market pricing: get total cost of current market
     function getMarketCost() public view returns (uint256) {
         uint256 expSum = this.expScaled(liquidity[Outcome.HOME_WINS]) +
                         this.expScaled(liquidity[Outcome.HOME_DRAW]) +
@@ -387,7 +398,7 @@ contract SportsBettingHook is BaseHook {
         
     }
 
-    // Function for exponent
+   // Scales input by liquidityParameter before computing exp()
     function expScaled(uint256 x) public view returns (uint256) {
         //require(x <= 133e18, "Input too large for exp()");
         
@@ -398,7 +409,7 @@ contract SportsBettingHook is BaseHook {
     }
 
     
-    /// Sets the betting market as open
+     // Opens betting market with a start and end time
     function openBetMarket(uint256 _startTime, uint256 _endTime) external  {
         require(!betMarketOpen, "Market already open");
         require(_startTime < _endTime, "Invalid time range");
@@ -419,7 +430,7 @@ contract SportsBettingHook is BaseHook {
         betMarketClosed = true;
     }
 
-    /// Resolves the betting market with an outcome
+     // Resolves the match with a winning outcome
     function resolveMarket(uint8 outcome) external  {
         require(betMarketClosed, "Market must be closed first");
         require(!resolved, "Market already resolved");
@@ -439,7 +450,7 @@ contract SportsBettingHook is BaseHook {
         matchSettled = true;
     }
 
-    /// Resets the market for a new match
+     // Resets all state variables to prepare for a new match
     function resetMarket() external  {
         require(resolved, "Market must be resolved first");
 
@@ -453,16 +464,17 @@ contract SportsBettingHook is BaseHook {
         endTime = 0;
     }
 
-    /// Gets the current state of the betting market
+    // Public view function for frontend to get market state
     function getMarketState() external view returns (bool, bool, bool, uint256, uint256) {
         return (betMarketOpen, betMarketClosed, resolved, startTime, endTime);
     }
 
-    // Helper function to get pool ID
+    // Helper function to compute a deterministic pool ID
     function getPoolId(PoolKey memory key) internal pure returns (bytes32) {
         return keccak256(abi.encode(key));
     }
 
+    // Associates pool keys with their respective outcomes
     function registerPools(PoolKey calldata keyWin, PoolKey calldata keyLose, PoolKey calldata keyDraw) external {
         poolToOutcome[getPoolId(keyWin)] = Outcome.HOME_WINS;
         poolToOutcome[getPoolId(keyLose)] = Outcome.HOME_LOSE;

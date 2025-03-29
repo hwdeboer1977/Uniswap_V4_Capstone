@@ -23,54 +23,60 @@ contract SportsBettingHookTest is Test, Deployers {
 
     SportsBettingHook hook;
 
+    // Sample user addresses for placing bets
     address user1 = address(0x1111); 
     address user2 = address(0x2222);
     address user3 = address(0x3333);
 
+     // Currency types (ERC20 wrapped into Uniswap's Currency type)
     Currency public currencyUsdc; // USDC
     Currency public currencyWin; // WIN
     Currency public currencyLose; // LOSE
     Currency public currencyDraw; // DRAW
 
+    // Pool keys for each outcome pool
     PoolKey public keyWin;
     PoolKey public keyLose;
     PoolKey public keyDraw;
 
-     // Initialize bets
+     // Amount used for test betting
     uint256 amountInUser1 = 20 * 1e18; // 20 WIN Tokens
-    uint256 public storedBetCost; // State variable to store bet cost
 
+    // Optional: a storage variable to track last bet cost
+    uint256 public storedBetCost; 
+
+     // Setup logic that runs before every test
     function setUp() public {
-        // Note: Deployers only works with currency0 and currency1
+        // Deploy new Uniswap V4 PoolManager and router
+        // Deployers only works with currency0 and currency1
         deployFreshManagerAndRouters();
-        // (currency0, currency1) = deployMintAndApprove2Currencies();
+        
 
          
-        // Deploy USDC token manually 
+        // Manually deploy mock tokens for the test
         MockERC20 usdcToken = new MockERC20("USDC", "USDC", 18);
         usdcToken.mint(address(this), 1_000_000 ether);
         usdcToken.approve(address(hook), type(uint256).max);
         currencyUsdc = Currency.wrap(address(usdcToken));
 
-                // Deploy USDC token manually 
+
         MockERC20 winToken = new MockERC20("WIN", "WIN", 18);
         winToken.mint(address(this), 1_000_000 ether);
         winToken.approve(address(hook), type(uint256).max);
         currencyWin = Currency.wrap(address(winToken));
-        
-        // Deploy LOSE token manually 
+
         MockERC20 loseToken = new MockERC20("LOSE", "LOSE", 18);
         loseToken.mint(address(this), 1_000_000 ether);
         loseToken.approve(address(hook), type(uint256).max);
         currencyLose = Currency.wrap(address(loseToken));
 
-        // Deploy DRAW token manually 
+       
         MockERC20 drawToken = new MockERC20("DRAW", "DRAW", 18);
         drawToken.mint(address(this), 1_000_000 ether);
         drawToken.approve(address(hook), type(uint256).max);
         currencyDraw = Currency.wrap(address(drawToken));
 
-
+        // Deploy and configure the hook with required flags
         address hookAddress = address(
             uint160(
                 Hooks.BEFORE_ADD_LIQUIDITY_FLAG |
@@ -81,6 +87,7 @@ contract SportsBettingHookTest is Test, Deployers {
         deployCodeTo("SportsBettingHook.sol", abi.encode(manager), hookAddress);
         hook = SportsBettingHook(hookAddress);
 
+        // Initialize pools with each outcome (USDC paired with WIN, LOSE, DRAW)
         (keyWin, ) = initPool(
             currencyUsdc,
             currencyWin,
@@ -94,7 +101,7 @@ contract SportsBettingHookTest is Test, Deployers {
         (keyDraw, ) = initPool(currencyUsdc, currencyDraw, hook, 3000, SQRT_PRICE_1_1);
 
 
-        // Add some initial liquidity through the custom `addLiquidity` function
+        // Approve tokens to the hook so it can add liquidity
         IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(
             hookAddress,
             1_000_000 ether
@@ -125,7 +132,7 @@ contract SportsBettingHookTest is Test, Deployers {
         console.log("Address token LOSE: ", tokenLose);
         console.log("Address token DRAW: ", tokenDraw);
 
-        // Cast to mock token interface if needed
+        // Mint USDC to users for betting
         MockERC20(tokenUsdc).mint(user1, 10000 ether);
         MockERC20(tokenUsdc).mint(user2, 10000 ether);
         MockERC20(tokenUsdc).mint(user3, 10000 ether);
@@ -135,7 +142,7 @@ contract SportsBettingHookTest is Test, Deployers {
         hook.addLiquidity(keyLose, 1000e18);
         hook.addLiquidity(keyDraw, 1000e18);
   
-        // Check balances
+        // Log pool balances (optional debug)
         uint256 balancePM0 = currencyUsdc.balanceOf(address(manager));
         uint256 balancePM1 = currencyWin.balanceOf(address(manager)); 
         uint256 balancePM2 = currencyLose.balanceOf(address(manager));  
@@ -145,42 +152,15 @@ contract SportsBettingHookTest is Test, Deployers {
         console.log("Balance PM currency LOSE: ", balancePM2);  
         console.log("Balance PM currency DRAW: ", balancePM3); 
 
-   
+        // Map each pool key to its associated outcome
         hook.registerPools(keyWin, keyLose, keyDraw);
 
 
     }
 
-    //  function test_claimTokenBalances() public view {
-//         // We add 1000 * (10^18) of liquidity of each token to the CSMM pool
-//         // The actual tokens will move into the PM
-//         // But the hook should get equivalent amount of claim tokens for each token
-//         uint token0ClaimID = CurrencyLibrary.toId(currency0);
-//         uint token1ClaimID = CurrencyLibrary.toId(currency1);
-//         console.log("token0ClaimID: ", token0ClaimID);
-//         console.log("token1ClaimID: ", token1ClaimID);
 
 
-//         uint token0ClaimsBalance = manager.balanceOf(
-//             address(hook),
-//             token0ClaimID
-//         );
-//         uint token1ClaimsBalance = manager.balanceOf(
-//             address(hook),
-//             token1ClaimID
-//         );
-//         // console.log("Address PM:" , address(manager));
-//         console.log("Balance token0ClaimsBalance Hook:" , token0ClaimsBalance);
-//         console.log("Balance token1ClaimsBalance Hook:" , token1ClaimsBalance);
-
-
-
-//         assertEq(token0ClaimsBalance, 1000e18);
-//         assertEq(token1ClaimsBalance, 1000e18);
-//     }
-
-
-
+    // Test that liquidity cannot be modified directly through the router (expected revert)
     function test_cannotModifyLiquidity() public {
         vm.expectRevert();
         modifyLiquidityRouter.modifyLiquidity(
@@ -197,7 +177,7 @@ contract SportsBettingHookTest is Test, Deployers {
     }
 
     
-
+     // Main test: three users place bets on three outcomes, market is resolved, and one claims winnings
      function test_swap_exactOutput_zeroForOne() public {
 
         // Settings swap 
@@ -206,11 +186,10 @@ contract SportsBettingHookTest is Test, Deployers {
             settleUsingBurn: false
         });
        
-        // User 1 bets on WIN
+        // --- User 1 bets on WIN outcome ---
          vm.startPrank(user1);
 
-        // IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(manager), type(uint256).max);
-        // IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(manager), type(uint256).max);
+        // Approve tokens
         IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
         IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
 
@@ -232,11 +211,10 @@ contract SportsBettingHookTest is Test, Deployers {
          vm.stopPrank();
 
 
-        // User 2 bets on LOSE
+        // --- User 2 bets on LOSE outcome ---
         vm.startPrank(user2);
 
-        // IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(manager), type(uint256).max);
-        // IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(manager), type(uint256).max);
+
         IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
         IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
 
@@ -257,7 +235,7 @@ contract SportsBettingHookTest is Test, Deployers {
          vm.stopPrank();
 
 
-        // User 3 bets on DRAW
+        // --- User 3 bets on DRAW outcome ---
         vm.startPrank(user3);
 
         // Approvals
@@ -286,13 +264,16 @@ contract SportsBettingHookTest is Test, Deployers {
          // await router.swap(key, swapParams, settings, encodedUser);
 
 
-        // Close bet market
+        // PM: in a production-ready betting protocol, we should open and close betting with oracle
+        // Use an off-chain data feed or API (like an oracle) to
+        // Automatically schedule when a match begins (e.g., based on match fixtures).
+        // Open betting N hours before kickoff.
+        // Close the market and resolve the outcome to WIN
         hook.closeBetMarket();
 
-        // Set match result
         hook.resolveMarket(1); // 1 = WIN, 2 = LOSE, 3 = DRAW
 
-
+         // Let user1 claim their winnings for the WIN pool
          // Call function to claim the winnings
          hook.claimWinnings(keyLose, user1);
 
@@ -301,39 +282,4 @@ contract SportsBettingHookTest is Test, Deployers {
     }
 
    
-
-//     function getLMSRPrice() public {
-        
-//             // Swap functionality here
-//             // vm.startPrank(user1);
-
-//             // Determine price of token HomeWin based on LMSR
-            
-//             // 1. Open Bet Market
-//             hook.openBetMarket(1,10);
-//             bool betMarketOpen = hook.betMarketOpen();
-//             console.log("Status Bet Market: ", betMarketOpen);
-
-//             // 3 users with different bets
-//             // tokenUsdc.approve(address(sportsBettingHook), amountInUser1);
-//             //hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1);
-//             hook.placeBet(SportsBettingHook.Outcome.HOME_WINS, amountInUser1, address(user1));
-            
-//             console.log("Bet amount user 1:", hook.betAmount());
-//             console.log("Initial cost :", hook.initialCost());   
-//             console.log("New liquidity:", hook.newLiquidity());   
-//             console.log("New cost:", hook.newCost()); 
-
-//             // Retrieve bet cost from public state variable
-//             storedBetCost = hook.betCost();
-
-//             // Log bet cost
-//             console.log("Bet cost User 1, calculated by LMSR:", storedBetCost, "USDC");
-
-//             // Assertions to ensure `betCost` updated correctly
-//             assertGt(storedBetCost, 0, "Bet cost should be greater than zero");
-
-            
-   
-//     }
 }
