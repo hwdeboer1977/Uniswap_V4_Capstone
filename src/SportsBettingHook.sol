@@ -12,12 +12,15 @@ import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
 import { UD60x18, ud } from "prb-math/UD60x18.sol";
 import "forge-std/console.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+
 
 // Implements LMSR (Logarithmic Market Scoring Rule) for pricing bets
 // Inspired by the Constant Sum Market Maker (CSMM) example by Atrium Academy
 // https://github.com/haardikk21/csmm-noop-hook/tree/main
 
-contract SportsBettingHook is BaseHook {
+contract SportsBettingHook is BaseHook, Ownable {
     using CurrencySettler for Currency;
     using CurrencyLibrary for Currency;
 
@@ -73,7 +76,7 @@ contract SportsBettingHook is BaseHook {
 
 
 
-    constructor(IPoolManager poolManager) BaseHook(poolManager) {
+    constructor(IPoolManager poolManager) BaseHook(poolManager)  Ownable(tx.origin) {
             liquidity[Outcome.HOME_WINS] = 0;
             liquidity[Outcome.HOME_DRAW] = 0;
             liquidity[Outcome.HOME_LOSE] = 0;
@@ -290,9 +293,6 @@ contract SportsBettingHook is BaseHook {
             key.currency0.settle(poolManager, address(this), amountOut, true); // user gets 200 WIN
         }
 
-        uint256 claimable = key.currency0.balanceOf(address(this)); // 
-        //console.log("usdcClaimBalance: ", claimable);
-
 
         return (this.beforeSwap.selector, beforeSwapDelta, 0);
     }
@@ -410,7 +410,7 @@ contract SportsBettingHook is BaseHook {
 
     
      // Opens betting market with a start and end time
-    function openBetMarket(uint256 _startTime, uint256 _endTime) external  {
+    function openBetMarket(uint256 _startTime, uint256 _endTime) external onlyOwner {
         require(!betMarketOpen, "Market already open");
         require(_startTime < _endTime, "Invalid time range");
         
@@ -422,7 +422,7 @@ contract SportsBettingHook is BaseHook {
     }
 
     // Function to close the Betting market
-    function closeBetMarket() external {
+    function closeBetMarket() external onlyOwner {
         require(betMarketOpen, "Market is not open");
         require(block.timestamp >= startTime, "Cannot close before start");
 
@@ -431,7 +431,7 @@ contract SportsBettingHook is BaseHook {
     }
 
      // Resolves the match with a winning outcome
-    function resolveMarket(uint8 outcome) external  {
+    function resolveMarket(uint8 outcome) external onlyOwner {
         require(betMarketClosed, "Market must be closed first");
         require(!resolved, "Market already resolved");
 
@@ -451,7 +451,7 @@ contract SportsBettingHook is BaseHook {
     }
 
      // Resets all state variables to prepare for a new match
-    function resetMarket() external  {
+    function resetMarket() external onlyOwner {
         require(resolved, "Market must be resolved first");
 
         betMarketOpen = false;

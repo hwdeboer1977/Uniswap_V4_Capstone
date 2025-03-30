@@ -143,7 +143,7 @@ contract SportsBettingHookTest is Test, Deployers {
         hook.addLiquidity(keyWin, 1000e18);
         hook.addLiquidity(keyLose, 1000e18);
         hook.addLiquidity(keyDraw, 1000e18);
-  
+
         // Log pool balances (optional debug)
         uint256 balancePM0 = currencyUsdc.balanceOf(address(manager));
         uint256 balancePM1 = currencyWin.balanceOf(address(manager)); 
@@ -187,10 +187,11 @@ contract SportsBettingHookTest is Test, Deployers {
             takeClaims: false,
             settleUsingBurn: false
         });
-       
+
+        vm.startPrank(tx.origin);
         // Open the betting market (runs for 7 days)
         hook.openBetMarket(block.timestamp, block.timestamp + 7 days);
-
+        vm.stopPrank();
 
         // --- User 1 bets on WIN outcome ---
          vm.startPrank(user1);
@@ -301,9 +302,14 @@ contract SportsBettingHookTest is Test, Deployers {
         // Automatically schedule when a match begins (e.g., based on match fixtures).
         // Open betting N hours before kickoff.
         // Close the market and resolve the outcome to WIN
+        
+        vm.startPrank(tx.origin);
         hook.closeBetMarket();
-
+        vm.stopPrank();
+        
+        vm.startPrank(tx.origin);
         hook.resolveMarket(1); // 1 = WIN, 2 = LOSE, 3 = DRAW
+        vm.stopPrank();
 
         // --- Payout: user1 claims winnings ---
         uint256 user1ClaimBefore = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
