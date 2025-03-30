@@ -160,10 +160,14 @@ contract SportsBettingHookTest is Test, Deployers {
 
 
         // Set the odds before the match starts
-        // Sets odds: 1.60 (160), 4.23 (423), 5.30 (530)
+        // For now, we are still using the initial liquidity at 0, so prob = 1/3
+
+        // Suppose a bookmaker has the following odds: 1.60 (160), 4.23 (423), 5.30 (530)
+        // The function setInitialLiquidityFromOdds then sets the correct amounts of liquidity
+        // for all 3 outcomes such that we have the same odds as the bookmakers
         hook.setInitialLiquidityFromOdds(160, 423, 530);
 
-        // Check the outcome probablities (should be roughly the inverse of the odds above)
+        // Double check the outcome probablities (should be roughly the inverse of the odds above)
         hook.getOutcomeProbabilities();
     }
 
