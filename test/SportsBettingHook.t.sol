@@ -54,6 +54,7 @@ contract SportsBettingHookTest is Test, Deployers {
         deployFreshManagerAndRouters();
         
 
+
          
         // Manually deploy mock tokens for the test
         MockERC20 usdcToken = new MockERC20("USDC", "USDC", 18);
@@ -158,6 +159,12 @@ contract SportsBettingHookTest is Test, Deployers {
         hook.registerPools(keyWin, keyLose, keyDraw);
 
 
+        // Set the odds before the match starts
+        // Sets odds: 1.60 (160), 4.23 (423), 5.30 (530)
+        hook.setInitialLiquidityFromOdds(160, 423, 530);
+
+        // Check the outcome probablities (should be roughly the inverse of the odds above)
+        hook.getOutcomeProbabilities();
     }
 
 

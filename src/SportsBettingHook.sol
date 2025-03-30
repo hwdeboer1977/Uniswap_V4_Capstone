@@ -10,6 +10,7 @@ import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
 import { UD60x18, ud } from "prb-math/UD60x18.sol";
+import { sd, ln } from "@prb/math/SD59x18.sol";
 import "forge-std/console.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -23,15 +24,19 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract SportsBettingHook is BaseHook, Ownable {
     using CurrencySettler for Currency;
     using CurrencyLibrary for Currency;
+  
 
-    uint256 public liquidityParameter = 500e18;
-    enum Outcome { HOME_WINS, HOME_DRAW, HOME_LOSE }
+    uint256 public constant SCALE = 1e18; // fixed-point base (18 decimals)
+    uint256 public liquidityParameter = 500e18; // Liquidity parameter in LMSR
+
+    enum Outcome { HOME_WINS, HOME_DRAW, HOME_LOSE } // 3 match outcomes
 
      // Mapping from pool ID to associated betting outcome
     mapping(bytes32 => Outcome) public poolToOutcome;
 
      // Liquidity held for each outcome
     mapping(Outcome => uint256) public liquidity;
+    mapping(Outcome => uint256) public initialLiquidity;
 
     // Tracks each user's bets per outcome
     mapping(Outcome => mapping(address => uint256)) public userBets;
@@ -74,11 +79,79 @@ contract SportsBettingHook is BaseHook, Ownable {
         address sender;
     }
 
+    // Struct for the initial odds coming from https://the-odds-api.com/
+    struct MatchOdds {
+        string homeTeam;
+        string awayTeam;
+        uint256 homeWinOdds;
+        uint256 drawOdds;
+        uint256 awayWinOdds;
+        bool exists;
+    }
+    
+    mapping(bytes32 => MatchOdds) public matches;
+
+    // We can set initial liquidity at 0 for all outcomes which initializes equal probabilties (1/3)
+    // It is better to follow the bookmaker's intitial odds and deploy with corresponding liquidity.
+    // PM: Function has been tested and is working correctly.
+    // However, capstone submission is still using initial liquidity of 0 and probabilities 1/3
+    function setInitialLiquidityFromOdds(
+        uint256 oddsWin,  // e.g., 160 for 1.60
+        uint256 oddsDraw, // e.g., 423 for 4.23
+        uint256 oddsLose  // e.g., 530 for 5.30
+    ) public {
+        // 1. Raw implied probabilities (scaled): 1e36 / oddsX to simulate 1 / odds
+        uint256 pWin = (SCALE * 1e18) / oddsWin;
+        uint256 pDraw = (SCALE * 1e18) / oddsDraw;
+        uint256 pLose = (SCALE * 1e18) / oddsLose;
+
+        uint256 total = pWin + pDraw + pLose;
+
+       
+        // 2. Normalize to sum to 1e18
+        uint256 normWin = (pWin * SCALE) / total;
+        uint256 normDraw = (pDraw * SCALE) / total;
+        uint256 normLose = (pLose * SCALE) / total;
+
+   
+        // 4. Compute ln(p_i)
+        int256 lnWin = ln(sd(int256(normWin))).unwrap();
+        int256 lnDraw = ln(sd(int256(normDraw))).unwrap();
+        int256 lnLose = ln(sd(int256(normLose))).unwrap();
+
+       
+        // 4. q_i = b * (ln(p_i) - ln(p_win))
+        int256 qWin = 0;
+        int256 qDraw = ((lnDraw - lnWin) * int256(liquidityParameter)) / int256(SCALE);
+        int256 qLose = ((lnLose - lnWin) * int256(liquidityParameter)) / int256(SCALE);
+
+         // Get the lowest value (to rescale)
+         int256 qLowest = min3(qWin, qDraw, qLose);   
+
+         uint256 uWin = uint256(qWin - qLowest);
+         uint256 uDraw = uint256(qDraw - qLowest);
+         uint256 uLose = uint256(qLose - qLowest);
+
+        // Set initial liquidity that reflects the bookmakers' initial odds
+        initialLiquidity[Outcome.HOME_WINS] = uWin;
+        initialLiquidity[Outcome.HOME_DRAW] = uDraw;
+        initialLiquidity[Outcome.HOME_LOSE] = uLose;
 
 
+        console.log("Initial LMSR virtual shares (q_i):");
+        console.log("WIN:  ", initialLiquidity[Outcome.HOME_WINS]);
+        console.log("DRAW: ", initialLiquidity[Outcome.HOME_DRAW]);
+        console.log("LOSE: ", initialLiquidity[Outcome.HOME_LOSE]);
+
+    }
+
+ 
+    // We start with initial liquidity 0 which means equal probabilties (1/3)
+    // TO DO: deploy with initial liquidity so that it is representing the bookmakers' odds 
+    // See setInitialLiquidityFromOdds above (not being used for now!)
     constructor(IPoolManager poolManager) BaseHook(poolManager)  Ownable(tx.origin) {
-            liquidity[Outcome.HOME_WINS] = 0;
-            liquidity[Outcome.HOME_DRAW] = 0;
+            liquidity[Outcome.HOME_WINS] = 0; 
+            liquidity[Outcome.HOME_DRAW] = 0; 
             liquidity[Outcome.HOME_LOSE] = 0;
     }
 
@@ -408,6 +481,7 @@ contract SportsBettingHook is BaseHook, Ownable {
         return fixedX.exp().unwrap(); // Compute e^x correctly
     }
 
+ 
     
      // Opens betting market with a start and end time
     function openBetMarket(uint256 _startTime, uint256 _endTime) external onlyOwner {
@@ -481,6 +555,34 @@ contract SportsBettingHook is BaseHook, Ownable {
         poolToOutcome[getPoolId(keyDraw)] = Outcome.HOME_DRAW;
     }
 
+    function getOutcomeProbabilities() public view returns (uint256 winP, uint256 drawP, uint256 loseP) {
+        // LMSR pricing: p_i = e^(q_i / b) / sum_j e^(q_j / b)
+        uint256 eWin = expScaled(initialLiquidity[Outcome.HOME_WINS]);
+        uint256 eDraw = expScaled(initialLiquidity[Outcome.HOME_DRAW]);
+        uint256 eLose = expScaled(initialLiquidity[Outcome.HOME_LOSE]);
+
+        uint256 sum = eWin + eDraw + eLose;
+
+        winP = (eWin * 1e18) / sum;
+        drawP = (eDraw * 1e18) / sum;
+        loseP = (eLose * 1e18) / sum;
+
+        console.log("Probability WIN: ", winP);
+        console.log("Probability DRAW: ", drawP);
+        console.log("Probability LOSE: ", loseP);
+    }
+
+    // Helper function for the minimum value
+    function min3(int256 a, int256 b, int256 c) internal pure returns (int256) {
+        int256 min = a;
+        if (b < min) {
+            min = b;
+        }
+        if (c < min) {
+            min = c;
+        }
+        return min;
+    }
 
 
 
