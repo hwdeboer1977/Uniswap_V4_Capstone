@@ -243,7 +243,7 @@ contract SportsBettingHook is BaseHook {
         require(params.amountSpecified > 0, "Only Exact Output supported");
 
 
-        // Call the function placeBet to determine the cost of the bet (in USDC)
+        // Call the function placeBet to determine the cost of the bet (in USDC): LMSR
         // Derive outcome for this pool and calculate bet cost
         Outcome outcome = poolToOutcome[getPoolId(key)];
         placeBet(outcome, uint256(params.amountSpecified), user);
@@ -276,7 +276,7 @@ contract SportsBettingHook is BaseHook {
 
         if (params.zeroForOne) {
             // Token0 = USDC, Token1 = WIN
-            // User wants 200 WIN → pays betcost USDC
+            // User1 wants 200 WIN → pays betcost USDC
             // Pull USDC from user, but assign claim to the HOOK (this contract) so use false
             key.currency0.take(poolManager, address(this), amountIn, false);     // user gives USDC
             key.currency1.settle(poolManager, address(this), amountOut, true);  // user gets WIN

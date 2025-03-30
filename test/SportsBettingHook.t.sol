@@ -39,8 +39,10 @@ contract SportsBettingHookTest is Test, Deployers {
     PoolKey public keyLose;
     PoolKey public keyDraw;
 
-     // Amount used for test betting
-    uint256 amountInUser1 = 20 * 1e18; // 20 WIN Tokens
+    // Betting amounts
+    int256 amountUser1 = 200e18;
+    int256 amountUser2 = 100e18;
+    int256 amountUser3 = 150e18;
 
     // Optional: a storage variable to track last bet cost
     uint256 public storedBetCost; 
@@ -209,7 +211,7 @@ contract SportsBettingHookTest is Test, Deployers {
             keyWin,
             IPoolManager.SwapParams({
                 zeroForOne: true,
-                amountSpecified: 200e18,
+                amountSpecified: amountUser1,
                 sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
             }),
             settings,
@@ -242,7 +244,7 @@ contract SportsBettingHookTest is Test, Deployers {
             keyLose,
             IPoolManager.SwapParams({
                 zeroForOne: true,
-                amountSpecified: 100e18,
+                amountSpecified: amountUser2,
                 sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
             }),
             settings,
@@ -274,7 +276,7 @@ contract SportsBettingHookTest is Test, Deployers {
             keyDraw,
             IPoolManager.SwapParams({
                 zeroForOne: true,
-                amountSpecified: 150e18,
+                amountSpecified: amountUser3,
                 sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
             }),
             settings,
