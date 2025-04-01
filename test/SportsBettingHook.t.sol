@@ -54,29 +54,26 @@ contract SportsBettingHookTest is Test, Deployers {
         deployFreshManagerAndRouters();
         
 
-
+        console.log("address this: ", address(this));
+        
          
         // Manually deploy mock tokens for the test
         MockERC20 usdcToken = new MockERC20("USDC", "USDC", 18);
         usdcToken.mint(address(this), 1_000_000 ether);
-        usdcToken.approve(address(hook), type(uint256).max);
         currencyUsdc = Currency.wrap(address(usdcToken));
 
 
         MockERC20 winToken = new MockERC20("WIN", "WIN", 18);
         winToken.mint(address(this), 1_000_000 ether);
-        winToken.approve(address(hook), type(uint256).max);
         currencyWin = Currency.wrap(address(winToken));
 
         MockERC20 loseToken = new MockERC20("LOSE", "LOSE", 18);
         loseToken.mint(address(this), 1_000_000 ether);
-        loseToken.approve(address(hook), type(uint256).max);
         currencyLose = Currency.wrap(address(loseToken));
 
        
         MockERC20 drawToken = new MockERC20("DRAW", "DRAW", 18);
         drawToken.mint(address(this), 1_000_000 ether);
-        drawToken.approve(address(hook), type(uint256).max);
         currencyDraw = Currency.wrap(address(drawToken));
 
         // Deploy and configure the hook with required flags
@@ -154,6 +151,11 @@ contract SportsBettingHookTest is Test, Deployers {
         console.log("Balance Pool Manager currency WIN: ", balancePM1/1e18);  
         console.log("Balance Pool Manager currency LOSE: ", balancePM2/1e18);  
         console.log("Balance Pool Manager currency DRAW: ", balancePM3/1e18); 
+
+        // Get addresses
+        console.log("address this: ", address(this));
+        console.log("address hook: ", address(hook));
+        console.log("address poolmanager: ", address(manager));
 
         // Map each pool key to its associated outcome
         hook.registerPools(keyWin, keyLose, keyDraw);
