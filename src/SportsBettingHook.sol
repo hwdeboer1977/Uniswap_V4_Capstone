@@ -70,7 +70,7 @@ contract SportsBettingHook is BaseHook, Ownable {
 
     error AddLiquidityThroughHook();
 
-    
+ 
 
     struct CallbackData {
         uint256 amountEach;
@@ -90,6 +90,9 @@ contract SportsBettingHook is BaseHook, Ownable {
     }
     
     mapping(bytes32 => MatchOdds) public matches;
+
+    address usdcToken;
+    address otherToken;
 
     // We can set initial liquidity at 0 for all outcomes which initializes equal probabilties (1/3)
     // It is better to follow the bookmaker's intitial odds and deploy with corresponding liquidity.
@@ -154,6 +157,7 @@ contract SportsBettingHook is BaseHook, Ownable {
             liquidity[Outcome.HOME_DRAW] = 0; 
             liquidity[Outcome.HOME_LOSE] = 0;
     }
+
 
      // Define the permissions for this hook
     function getHookPermissions()
@@ -334,8 +338,8 @@ contract SportsBettingHook is BaseHook, Ownable {
         int128 specifiedDelta = int128(-params.amountSpecified);              // -200 WIN
         int128 unspecifiedDelta = int128(int256(betCost)); // LMSR-computed cost
 
-        //console.log("specifiedDelta:", specifiedDelta);
-        //console.log("unspecifiedDelta:", unspecifiedDelta);
+        console.log("specifiedDelta:", specifiedDelta);
+        console.log("unspecifiedDelta:", unspecifiedDelta);
 
         // BeforeSwapDelta varies such that it is not sorted by token0 and token1
         // Instead, it is sorted by "specifiedCurrency" and "unspecifiedCurrency"
@@ -343,6 +347,7 @@ contract SportsBettingHook is BaseHook, Ownable {
             specifiedDelta,
             unspecifiedDelta
         );
+
 
         // Convert int128 → int256 → uint256 safely
         uint256 amountIn = uint256(int256(unspecifiedDelta));      
@@ -357,13 +362,20 @@ contract SportsBettingHook is BaseHook, Ownable {
             key.currency0.take(poolManager, address(this), amountIn, false);     // user gives USDC
             key.currency1.settle(poolManager, address(this), amountOut, true);  // user gets WIN
 
+            usdcToken = Currency.unwrap(key.currency0);
+            otherToken = Currency.unwrap(key.currency1);
+
             // Balances inside this _beforeSwap() are not updated directly
 
         } else {
             // User wants 100 USDC → pays 200 WIN (reverse direction)
 
-            key.currency1.take(poolManager, address(this), amountIn, true);    // user gives 400 USDC
-            key.currency0.settle(poolManager, address(this), amountOut, true); // user gets 200 WIN
+            key.currency1.take(poolManager, address(this), amountIn, false);    // user gives USDC
+            key.currency0.settle(poolManager, address(this), amountOut, true); // user gets WIN
+
+            
+            usdcToken = Currency.unwrap(key.currency1);
+            otherToken = Currency.unwrap(key.currency0);
         }
 
 
@@ -405,10 +417,10 @@ contract SportsBettingHook is BaseHook, Ownable {
 
           if (outcomeIsWIN) {
             winningOutcome = Outcome.HOME_WINS;
-        } else if (outcomeIsLOSE) {
-            winningOutcome = Outcome.HOME_LOSE;
         } else if (outcomeIsDRAW) {
             winningOutcome = Outcome.HOME_DRAW;
+        } else if (outcomeIsLOSE) {
+            winningOutcome = Outcome.HOME_LOSE;
         } else {
             revert("No outcome set yet");
         }
@@ -422,7 +434,13 @@ contract SportsBettingHook is BaseHook, Ownable {
         // Calculate total winnings pool
         uint256 totalWinningBets = liquidity[winningOutcome];
 
-        uint256 balanceUSDCWinPool = key.currency0.balanceOf(address(this));
+        // USDC in pool can be token0 or token1
+        // uint256 balanceUSDCWinPool = key.currency0.balanceOf(address(this));
+        uint256 balanceUSDCWinPool = IERC20Minimal(Currency.unwrap(key.currency0) == usdcToken
+                ? Currency.unwrap(key.currency0)
+                : Currency.unwrap(key.currency1)
+            ).balanceOf(address(this));
+
         console.log("balanceUSDCWinPool: ", balanceUSDCWinPool/1e18);
 
         // Calculate user share based on their bet proportion
@@ -447,9 +465,13 @@ contract SportsBettingHook is BaseHook, Ownable {
 
         userBets[winningOutcome][_user] = 0;
 
-        IERC20Minimal(Currency.unwrap(key.currency0)).transfer(_user, payout);
-
-        
+        IERC20Minimal(
+            Currency.unwrap(key.currency0) == usdcToken
+                ? Currency.unwrap(key.currency0)
+                : Currency.unwrap(key.currency1)
+        ).transfer(_user, payout);
+ 
+         
 
     }
 
@@ -514,9 +536,9 @@ contract SportsBettingHook is BaseHook, Ownable {
         if (outcome == 1) {
             outcomeIsWIN = true;
         } else if (outcome == 2) {
-            outcomeIsLOSE = true;
-        } else if (outcome == 3) {
             outcomeIsDRAW = true;
+        } else if (outcome == 3) {
+            outcomeIsLOSE = true;
         } else {
             revert("Invalid outcome");
         }
@@ -532,8 +554,8 @@ contract SportsBettingHook is BaseHook, Ownable {
         betMarketClosed = false;
         resolved = false;
         outcomeIsWIN = false;
-        outcomeIsLOSE = false;
         outcomeIsDRAW = false;
+        outcomeIsLOSE = false;
         startTime = 0;
         endTime = 0;
     }
@@ -549,10 +571,10 @@ contract SportsBettingHook is BaseHook, Ownable {
     }
 
     // Associates pool keys with their respective outcomes
-    function registerPools(PoolKey calldata keyWin, PoolKey calldata keyLose, PoolKey calldata keyDraw) external {
+    function registerPools(PoolKey calldata keyWin, PoolKey calldata keyDraw, PoolKey calldata keyLose) external {
         poolToOutcome[getPoolId(keyWin)] = Outcome.HOME_WINS;
-        poolToOutcome[getPoolId(keyLose)] = Outcome.HOME_LOSE;
         poolToOutcome[getPoolId(keyDraw)] = Outcome.HOME_DRAW;
+        poolToOutcome[getPoolId(keyLose)] = Outcome.HOME_LOSE;
     }
 
     function getOutcomeProbabilities() public view returns (uint256 winP, uint256 drawP, uint256 loseP) {

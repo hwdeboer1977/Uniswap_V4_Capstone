@@ -58,6 +58,10 @@ contract DeployManagerAndHook is Script {
     int256 amountUser2 = 100e18;
     int256 amountUser3 = 150e18;
 
+    bool zeroForOneWinDummy;
+    bool zeroForOneDrawDummy;
+    bool zeroForOneLoseDummy;
+
     // Currency types (ERC20 wrapped into Uniswap's Currency type)
     Currency public currencyUsdc; // USDC
     Currency public currencyWin; // WIN
@@ -129,10 +133,8 @@ contract DeployManagerAndHook is Script {
         drawToken.mint(address(deployer), 1_000_000 ether);
         currencyDraw = Currency.wrap(address(drawToken));
 
-        MockERC20 token0;
-        MockERC20 token1;
-        
-
+        console.log("USDC address: ", address(usdcToken));
+        console.log("WIN address: ", address(winToken));
 
         // Initialize the pool
         // Starting price of the pool, in sqrtPriceX96
@@ -141,7 +143,7 @@ contract DeployManagerAndHook is Script {
          int24 tickSpacing = 60;
         // 1st pool: WIN/USDC
         // Sort the tokens in correct order
-         (MockERC20 t0, MockERC20 t1) = sortTokens(usdcToken, winToken);
+         (MockERC20 t0, MockERC20 t1) = sortTokens(usdcToken, winToken, 0); // 0 = pool WIN
         
         PoolKey memory poolKeyWin =
             PoolKey(Currency.wrap(address(t0)), Currency.wrap(address(t1)), 3000, tickSpacing, IHooks(sportsBettingHook));
@@ -150,19 +152,21 @@ contract DeployManagerAndHook is Script {
 
         // 2nd pool: DRAW/USDC
         // Sort the tokens in correct order
-       (MockERC20 t2, MockERC20 t3) = sortTokens(usdcToken, drawToken);
+       (MockERC20 t2, MockERC20 t3) = sortTokens(usdcToken, drawToken, 1); // 1 = pool DRAW
         
         PoolKey memory poolKeyDraw =
             PoolKey(Currency.wrap(address(t2)), Currency.wrap(address(t3)), 3000, tickSpacing, IHooks(sportsBettingHook));
         manager.initialize(poolKeyDraw, startingPrice);
+         storedPoolKeyDraw = poolKeyDraw; // Store for later reuse
 
         // 3rd pool: LOSE/USDC
         // Sort the tokens in correct order
-          (MockERC20 t4, MockERC20 t5) = sortTokens(usdcToken, loseToken);
+          (MockERC20 t4, MockERC20 t5) = sortTokens(usdcToken, loseToken, 2); // // 2 = pool Lose
         
         PoolKey memory poolKeyLose =
             PoolKey(Currency.wrap(address(t4)), Currency.wrap(address(t5)), 3000, tickSpacing, IHooks(sportsBettingHook));
         manager.initialize(poolKeyLose, startingPrice);
+        storedPoolKeyLose = poolKeyLose; // Store for later reuse
 
 
         // Approve tokens to the hook so it can add liquidity via Hook
@@ -192,8 +196,8 @@ contract DeployManagerAndHook is Script {
 
         //  Add liquidity to SportsBettingHook
         sportsBettingHook.addLiquidity(storedPoolKeyWin, 1000 ether);
-        sportsBettingHook.addLiquidity(poolKeyDraw, 1000 ether);
-        sportsBettingHook.addLiquidity(poolKeyLose, 1000 ether);
+        sportsBettingHook.addLiquidity(storedPoolKeyDraw, 1000 ether);
+        sportsBettingHook.addLiquidity(storedPoolKeyLose, 1000 ether);
        
         console.log("Balance USDC PM, after: ", usdcToken.balanceOf(address(manager))/1e18);
         console.log("Balance WIN PM, after: ", winToken.balanceOf(address(manager))/1e18);
@@ -216,59 +220,71 @@ contract DeployManagerAndHook is Script {
         sportsBettingHook.getOutcomeProbabilities();
 
         
-
+        /////////////////////////// SOME CODE FOR TESTING BELOW //////////////////////////////////
         // Settings swap 
-        PoolSwapTest.TestSettings memory settings = PoolSwapTest.TestSettings({
-            takeClaims: false,
-            settleUsingBurn: false
-        });
+        // PoolSwapTest.TestSettings memory settings = PoolSwapTest.TestSettings({
+        //     takeClaims: false,
+        //     settleUsingBurn: false
+        // });
 
-        // Open the betting market (runs for 7 days)
-        sportsBettingHook.openBetMarket(block.timestamp, block.timestamp + 7 days);
+        // // Open the betting market (runs for 7 days)
+        // sportsBettingHook.openBetMarket(block.timestamp, block.timestamp + 7 days);
 
           
-             vm.stopBroadcast();
+        //      vm.stopBroadcast();
 
 
-        // Sample user addresses for placing bets
-        address user1 = address(0x1111); 
+        // // Sample user addresses for placing bets
+        // address user1 = address(0x1111); 
 
-        // --- User 1 bets on WIN outcome ---
-        vm.startPrank(user1);
+        // // --- User 1 bets on WIN outcome ---
+        // vm.startPrank(user1);
 
-        usdcToken.mint(address(user1), 1_000 ether);
+        // usdcToken.mint(address(user1), 1_000 ether);
 
-        // Approve tokens
-        IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
-        IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
+        // // Approve tokens
+        // IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
+        // IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
+
+        // // Check balances before swap
+        // console.log("Balance USDC user 1, before swap :", usdcToken.balanceOf(address(user1))/1e18);
+        // console.log("Balance WIN user 1, before swap :", winToken.balanceOf(address(user1))/1e18);
+        // console.log(zeroForOneWinDummy);
+        // // Swap token 
+        // swapRouter.swap(
+        //     storedPoolKeyWin,
+        //     IPoolManager.SwapParams({
+        //         zeroForOne: zeroForOneWinDummy,
+        //         amountSpecified: amountUser1,
+        //         sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+        //     }),
+        //     settings,
+        //     abi.encode(user1)
+        //     //ZERO_BYTES
+        // );
+
+        // // Check balances after swap
+        // console.log("Balance USDC user 1, after swap :", usdcToken.balanceOf(address(user1))/1e18);
+        // console.log("Balance WIN user 1, after swap :", winToken.balanceOf(address(user1))/1e18);
+
+        // vm.stopPrank();
 
 
-   
-        // Swap token 
-        swapRouter.swap(
-            storedPoolKeyWin,
-            IPoolManager.SwapParams({
-                zeroForOne: true,
-                amountSpecified: amountUser1,
-                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-            }),
-            settings,
-            abi.encode(user1)
-            //ZERO_BYTES
-        );
+        // vm.startPrank(deployer);
+        // sportsBettingHook.closeBetMarket();
+        // vm.stopPrank();
+        
+        // vm.startPrank(deployer);
+        // sportsBettingHook.resolveMarket(1); // 1 = WIN, 2 = LOSE, 3 = DRAW
+        // vm.stopPrank();
 
-        vm.stopPrank();
-   
-
-//         // Check USDC was spent
-//         uint256 user1UsdcAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
-//         assertLt(user1UsdcAfter, user1UsdcBefore); // user spent USDC
-
-
-//          vm.stopPrank();
-
-           
-
+        // // --- Payout: user1 claims winnings ---
+        // uint256 user1ClaimBefore = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
+        // console.log("user1ClaimBefore: ", user1ClaimBefore);
+        // sportsBettingHook.claimWinnings(storedPoolKeyWin, user1);
+        // uint256 user1ClaimAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
+        // console.log("user1ClaimAfter: ", user1ClaimAfter);
+ 
     }
 
     // -----------------------------------------------------------
@@ -290,16 +306,35 @@ contract DeployManagerAndHook is Script {
     // Function to sort the tokens for different liquidity pools
     function sortTokens(
         MockERC20 tokenInput0,
-        MockERC20 tokenInput1
-    ) internal pure returns (MockERC20 token0, MockERC20 token1) {
+        MockERC20 tokenInput1,
+        int16 poolNumber
+    ) internal returns (MockERC20 token0, MockERC20 token1) {
         if (uint160(address(tokenInput0)) < uint160(address(tokenInput1))) {
+            console.log("Token 0 is first token");
+            if (poolNumber == 0) {
+                zeroForOneWinDummy = true;
+            } else if (poolNumber == 1) {
+                zeroForOneDrawDummy = true;
+            } else if (poolNumber == 2) {
+                zeroForOneLoseDummy = true;
+            }
             token0 = tokenInput0;
             token1 = tokenInput1;
         } else {
+             console.log("Token 1 is first token");
+            if (poolNumber == 0) {
+                zeroForOneWinDummy = false;
+            } else if (poolNumber == 1) {
+                zeroForOneDrawDummy = false;
+            } else if (poolNumber == 2) {
+                zeroForOneLoseDummy = false;
+            }
             token0 = tokenInput1;
             token1 = tokenInput0;
         }
     }
+
+    
 
 
 }
