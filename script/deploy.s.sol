@@ -16,7 +16,7 @@ import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
-
+import {TickMath} from "v4-core/libraries/TickMath.sol";
 
 // My V4 SportsBettingHook is created with Foundry (WSL)
 // Frontend is created with React
@@ -48,6 +48,15 @@ contract DeployManagerAndHook is Script {
     PoolKey public PoolKeyWin;
     PoolKey public PoolKeyDraw;
     PoolKey public PoolKeyLose;
+
+    PoolKey internal storedPoolKeyWin;
+    PoolKey internal storedPoolKeyDraw;
+    PoolKey internal storedPoolKeyLose;
+
+    // Betting amounts
+    int256 amountUser1 = 200e18;
+    int256 amountUser2 = 100e18;
+    int256 amountUser3 = 150e18;
 
     // Currency types (ERC20 wrapped into Uniswap's Currency type)
     Currency public currencyUsdc; // USDC
@@ -132,26 +141,27 @@ contract DeployManagerAndHook is Script {
          int24 tickSpacing = 60;
         // 1st pool: WIN/USDC
         // Sort the tokens in correct order
-        (token0, token1) = sortTokens(usdcToken, winToken);
+         (MockERC20 t0, MockERC20 t1) = sortTokens(usdcToken, winToken);
         
         PoolKey memory poolKeyWin =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, tickSpacing, IHooks(sportsBettingHook));
+            PoolKey(Currency.wrap(address(t0)), Currency.wrap(address(t1)), 3000, tickSpacing, IHooks(sportsBettingHook));
         manager.initialize(poolKeyWin, startingPrice);
+         storedPoolKeyWin = poolKeyWin; // Store for later reuse
 
         // 2nd pool: DRAW/USDC
         // Sort the tokens in correct order
-        (token0, token1) = sortTokens(usdcToken, drawToken);
+       (MockERC20 t2, MockERC20 t3) = sortTokens(usdcToken, drawToken);
         
         PoolKey memory poolKeyDraw =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, tickSpacing, IHooks(sportsBettingHook));
+            PoolKey(Currency.wrap(address(t2)), Currency.wrap(address(t3)), 3000, tickSpacing, IHooks(sportsBettingHook));
         manager.initialize(poolKeyDraw, startingPrice);
 
         // 3rd pool: LOSE/USDC
         // Sort the tokens in correct order
-        (token0, token1) = sortTokens(usdcToken, loseToken);
+          (MockERC20 t4, MockERC20 t5) = sortTokens(usdcToken, loseToken);
         
         PoolKey memory poolKeyLose =
-            PoolKey(Currency.wrap(address(token0)), Currency.wrap(address(token1)), 3000, tickSpacing, IHooks(sportsBettingHook));
+            PoolKey(Currency.wrap(address(t4)), Currency.wrap(address(t5)), 3000, tickSpacing, IHooks(sportsBettingHook));
         manager.initialize(poolKeyLose, startingPrice);
 
 
@@ -181,7 +191,7 @@ contract DeployManagerAndHook is Script {
         console.log("Balance WIN PM, before: ", loseToken.balanceOf(address(manager))/1e18);
 
         //  Add liquidity to SportsBettingHook
-        sportsBettingHook.addLiquidity(poolKeyWin, 1000 ether);
+        sportsBettingHook.addLiquidity(storedPoolKeyWin, 1000 ether);
         sportsBettingHook.addLiquidity(poolKeyDraw, 1000 ether);
         sportsBettingHook.addLiquidity(poolKeyLose, 1000 ether);
        
@@ -205,111 +215,59 @@ contract DeployManagerAndHook is Script {
         // Double check the outcome probablities (should be roughly the inverse of the odds above)
         sportsBettingHook.getOutcomeProbabilities();
 
-         vm.stopBroadcast();
-
-
-
-
-    //     // Sort the currency in the correct order for intializing pools
-    //     if (Currency.unwrap(currencyUsdc) < Currency.unwrap(currencyWin)) {
-    //        (keyWin, ) = initPool(currencyUsdc, currencyWin, hook, 3000, SQRT_PRICE_1_1);
-    //        console.log("currentWin is 2nd token");
-    //     } else {
-    //        (keyWin, ) = initPool(currencyWin, currencyUsdc, hook, 3000, SQRT_PRICE_1_1);
-    //        console.log("currentWin is 1st token");
-    //     }
-
-    //     if (Currency.unwrap(currencyUsdc) < Currency.unwrap(currencyLose)) {
-    //        (keyLose, ) = initPool(currencyUsdc, currencyLose, hook, 3000, SQRT_PRICE_1_1);
-    //        console.log("currencyLose is 2nd token");
-    //     } else {
-    //        (keyLose, ) = initPool(currencyLose, currencyUsdc, hook, 3000, SQRT_PRICE_1_1);
-    //        console.log("currencyLose is 1st token");
-    //     }
-
-    //    if (Currency.unwrap(currencyUsdc) < Currency.unwrap(currencyDraw)) {
-    //        (keyDraw, ) = initPool(currencyUsdc, currencyDraw, hook, 3000, SQRT_PRICE_1_1);
-    //        console.log("currencyDraw is 2nd token");
-    //     } else {
-    //        (keyDraw, ) = initPool(currencyDraw, currencyUsdc, hook, 3000, SQRT_PRICE_1_1);
-    //        console.log("currencyDraw is 1st token");
-    //     }
-
-
-    //     // Approve tokens to the hook so it can add liquidity
-    //     IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(
-    //         hookAddress,
-    //         1_000_000 ether
-    //     );
-    //     IERC20Minimal(Currency.unwrap(currencyWin)).approve(
-    //         hookAddress,
-    //         1_000_000 ether
-    //     );
-
-    //     IERC20Minimal(Currency.unwrap(currencyLose)).approve(
-    //         hookAddress,
-    //         1_000_000 ether
-    //     );
-
-    //     IERC20Minimal(Currency.unwrap(currencyDraw)).approve(
-    //         hookAddress,
-    //         1_000_000 ether
-    //     );
-
-
-    //     // Check token addresses 
-    //     address tokenUsdc = Currency.unwrap(currencyUsdc);
-    //     address tokenWin = Currency.unwrap(currencyWin);
-    //     address tokenLose = Currency.unwrap(currencyLose);
-    //     address tokenDraw = Currency.unwrap(currencyDraw);
-    //     console.log("Address token USDC: ", tokenUsdc);
-    //     console.log("Address token WIN: ", tokenWin);
-    //     console.log("Address token LOSE: ", tokenLose);
-    //     console.log("Address token DRAW: ", tokenDraw);
-
-
-    //     // Check addresses 
-    //     console.log("Address this: ", address(this));
-    //     console.log("Address hook:", address(hook));
-    //     console.log("Address manager:", address(poolManager));
-
-
-    //     console.log("Balance USDC of deployer before adding liq :", usdcToken.balanceOf(address(deployer))/1e18);
-    //     console.log("Balance USDC of poolManager before adding liq :", usdcToken.balanceOf(address(poolManager))/1e18);
-
         
 
-    //     // Add liquidity to 3 outcome pools
-    //     hook.addLiquidity(keyWin, 1000e18);
-    //     hook.addLiquidity(keyDraw, 1000e18);
-    //      hook.addLiquidity(keyLose, 1000e18);
-         
+        // Settings swap 
+        PoolSwapTest.TestSettings memory settings = PoolSwapTest.TestSettings({
+            takeClaims: false,
+            settleUsingBurn: false
+        });
 
-        
+        // Open the betting market (runs for 7 days)
+        sportsBettingHook.openBetMarket(block.timestamp, block.timestamp + 7 days);
 
-    //     console.log("Balance USDC of deployer after adding liq :", usdcToken.balanceOf(address(deployer)));
-    //     console.log("Balance USDC of poolManager after adding liq :", usdcToken.balanceOf(address(manager))/1e18);
-    //     console.log("Balance WIN of poolManager after adding liq :", winToken.balanceOf(address(manager))/1e18);
-    //     console.log("Balance LOSE of poolManager after adding liq :", loseToken.balanceOf(address(manager))/1e18);
-    //     console.log("Balance DRAW of poolManager after adding liq :", drawToken.balanceOf(address(manager))/1e18);
+          
+             vm.stopBroadcast();
 
 
-    //     // Map each pool key to its associated outcome
-    //     hook.registerPools(keyWin, keyDraw, keyLose);
+        // Sample user addresses for placing bets
+        address user1 = address(0x1111); 
 
-        
-    //     // Set the odds before the match starts
-    //     // For now, we are still using the initial liquidity at 0, so prob = 1/3
+        // --- User 1 bets on WIN outcome ---
+        vm.startPrank(user1);
 
-    //     // Suppose a bookmaker has the following odds: 1.60 (160), 4.23 (423), 5.30 (530)
-    //     // The function setInitialLiquidityFromOdds then sets the correct amounts of liquidity
-    //     // for all 3 outcomes such that we have the same odds as the bookmakers
-    //     hook.setInitialLiquidityFromOdds(160, 423, 530);
+        usdcToken.mint(address(user1), 1_000 ether);
 
-    //     // Double check the outcome probablities (should be roughly the inverse of the odds above)
-    //     hook.getOutcomeProbabilities();
+        // Approve tokens
+        IERC20Minimal(Currency.unwrap(currencyUsdc)).approve(address(swapRouter), type(uint256).max);
+        IERC20Minimal(Currency.unwrap(currencyWin)).approve(address(swapRouter), type(uint256).max);
 
-        // vm.stopBroadcast();
+
+   
+        // Swap token 
+        swapRouter.swap(
+            storedPoolKeyWin,
+            IPoolManager.SwapParams({
+                zeroForOne: true,
+                amountSpecified: amountUser1,
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            settings,
+            abi.encode(user1)
+            //ZERO_BYTES
+        );
+
+        vm.stopPrank();
+   
+
+//         // Check USDC was spent
+//         uint256 user1UsdcAfter = IERC20Minimal(Currency.unwrap(currencyUsdc)).balanceOf(user1);
+//         assertLt(user1UsdcAfter, user1UsdcBefore); // user spent USDC
+
+
+//          vm.stopPrank();
+
+           
 
     }
 
