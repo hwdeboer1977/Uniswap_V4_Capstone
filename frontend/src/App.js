@@ -258,76 +258,78 @@ function App() {
   }, [walletAddress]);
 
   return (
-    <div className="p-4 max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Dortmund vs Freiburg</h1>
-
-      <div className="mb-2">Odds:</div>
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div>🏆 WIN: {odds.win}</div>
-        <div>🤝 DRAW: {odds.draw}</div>
-        <div>💥 LOSE: {odds.lose}</div>
-      </div>
-      <button onClick={openMarketWithWallet}>🏁 Open Betting Market</button>
-      <button onClick={closeMarketWithWallet}>🏁 Close Betting Market</button>
-      <button onClick={resetMarketWithWallet}>🏁 Reset Betting Market</button>
-      <button onClick={resolveMarketWithWallet}>
-        🏁 Resolve Betting Market
-      </button>
-
-      <input
-        type="number"
-        placeholder="Enter USDC amount"
-        value={usdcAmount}
-        onChange={(e) => setUsdcAmount(e.target.value)}
-        className="w-full p-2 border rounded mb-4"
-      />
-
-      {!walletAddress ? (
-        <button
-          onClick={connectWallet}
-          className="bg-blue-600 text-white px-4 py-2 rounded w-full mb-4"
-        >
-          Connect Wallet
-        </button>
-      ) : (
-        <div className="text-green-600 mb-4">
-          Connected: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+    <div className="container">
+      {/* Match + Odds */}
+      <div className="card">
+        <h1 className="title">Dortmund vs Freiburg</h1>
+        <div className="label">Odds:</div>
+        <div className="odds">
+          <div>🏆 {odds.win}</div>
+          <div>🤝 {odds.draw}</div>
+          <div>💥 {odds.lose}</div>
         </div>
-      )}
 
-      <div className="grid grid-cols-1 gap-2">
-        <button
-          onClick={() => handleApprove("WIN")}
-          className="bg-green-600 text-white p-2 rounded"
-        >
-          Approve WIN
-        </button>
-        <button
-          onClick={() => handleBuy("WIN")}
-          className="bg-green-600 text-white p-2 rounded"
-        >
-          Buy WIN
-        </button>
-        <button
-          onClick={() => handleBuy("DRAW")}
-          className="bg-yellow-500 text-white p-2 rounded"
-        >
-          Buy DRAW
-        </button>
-        <button
-          onClick={() => handleBuy("LOSE")}
-          className="bg-red-600 text-white p-2 rounded"
-        >
-          Buy LOSE
-        </button>
+        <div className="actions">
+          <button onClick={() => handleApprove("WIN")} className="btn green">
+            Approve WIN
+          </button>
+          <button onClick={() => handleBuy("WIN")} className="btn green">
+            Buy WIN
+          </button>
+          <button onClick={() => handleBuy("DRAW")} className="btn yellow">
+            Buy DRAW
+          </button>
+          <button onClick={() => handleBuy("LOSE")} className="btn red">
+            Buy LOSE
+          </button>
+        </div>
       </div>
-      <div className="grid-market-status">
-        <h2>Market status: </h2>
-        <p>Open: {status.open}</p>
-        <p>Closed: {status.closed}</p>
-        <p>Resolved: {status.resolved}</p>
-        <p>Start Time: {status.startTime}</p>
-        <p>Close Time: {status.closeTime}</p>
+
+      {/* Admin Controls */}
+      <div className="card">
+        <h2 className="subtitle">Controls</h2>
+        <div className="controls">
+          <button onClick={openMarketWithWallet} className="btn blue">
+            Open
+          </button>
+          <button onClick={closeMarketWithWallet} className="btn blue">
+            Close
+          </button>
+          <button onClick={resetMarketWithWallet} className="btn blue">
+            Reset
+          </button>
+          <button onClick={resolveMarketWithWallet} className="btn blue">
+            Resolve
+          </button>
+        </div>
+
+        <input
+          type="number"
+          placeholder="USDC amount"
+          value={usdcAmount}
+          onChange={(e) => setUsdcAmount(e.target.value)}
+          className="input"
+        />
+
+        {!walletAddress ? (
+          <button onClick={connectWallet} className="btn purple full">
+            Connect Wallet
+          </button>
+        ) : (
+          <div className="connected">
+            {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+          </div>
+        )}
+      </div>
+
+      {/* Status Info */}
+      <div className="card">
+        <h2 className="subtitle">Status</h2>
+        <p>Open: {String(status.open)}</p>
+        <p>Closed: {String(status.closed)}</p>
+        <p>Resolved: {String(status.resolved)}</p>
+        <p>Start: {status.startTime}</p>
+        <p>Close: {status.closeTime}</p>
       </div>
     </div>
   );
