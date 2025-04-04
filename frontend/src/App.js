@@ -264,14 +264,26 @@ function App() {
         <h1 className="title">Dortmund vs Freiburg</h1>
         <div className="label">Odds:</div>
         <div className="odds">
-          <div>🏆 {odds.win}</div>
-          <div>🤝 {odds.draw}</div>
-          <div>💥 {odds.lose}</div>
+          <div>
+            <strong>Home Wins:</strong>
+            <br />
+            🏆 {odds.win}
+          </div>
+          <div>
+            <strong>Draw:</strong>
+            <br />
+            🤝 {odds.draw}
+          </div>
+          <div>
+            <strong>Away Wins:</strong>
+            <br />
+            💥 {odds.lose}
+          </div>
         </div>
 
         <div className="actions">
-          <button onClick={() => handleApprove("WIN")} className="btn green">
-            Approve WIN
+          <button onClick={() => handleApprove("USDC")} className="btn green">
+            Approve USDC
           </button>
           <button onClick={() => handleBuy("WIN")} className="btn green">
             Buy WIN
@@ -282,54 +294,54 @@ function App() {
           <button onClick={() => handleBuy("LOSE")} className="btn red">
             Buy LOSE
           </button>
+
+          <input
+            type="number"
+            placeholder="USDC amount"
+            value={usdcAmount}
+            onChange={(e) => setUsdcAmount(e.target.value)}
+            className="input"
+          />
+
+          {!walletAddress ? (
+            <button onClick={connectWallet} className="btn purple full">
+              Connect Wallet
+            </button>
+          ) : (
+            <div className="connected">
+              {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Admin Controls */}
       <div className="card">
-        <h2 className="subtitle">Controls</h2>
+        <h2 className="subtitle">Admin Controls</h2>
         <div className="controls">
           <button onClick={openMarketWithWallet} className="btn blue">
-            Open
+            Open betting market
           </button>
           <button onClick={closeMarketWithWallet} className="btn blue">
-            Close
+            Close betting market
           </button>
           <button onClick={resetMarketWithWallet} className="btn blue">
-            Reset
+            Reset betting market
           </button>
           <button onClick={resolveMarketWithWallet} className="btn blue">
-            Resolve
+            Resolve betting market
           </button>
         </div>
-
-        <input
-          type="number"
-          placeholder="USDC amount"
-          value={usdcAmount}
-          onChange={(e) => setUsdcAmount(e.target.value)}
-          className="input"
-        />
-
-        {!walletAddress ? (
-          <button onClick={connectWallet} className="btn purple full">
-            Connect Wallet
-          </button>
-        ) : (
-          <div className="connected">
-            {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-          </div>
-        )}
       </div>
 
       {/* Status Info */}
       <div className="card">
-        <h2 className="subtitle">Status</h2>
-        <p>Open: {String(status.open)}</p>
-        <p>Closed: {String(status.closed)}</p>
+        <h2 className="subtitle">Status betting market</h2>
+        <p>Bettting market is open: {String(status.open)}</p>
+        <p>Bettting market is closed: {String(status.closed)}</p>
         <p>Resolved: {String(status.resolved)}</p>
-        <p>Start: {status.startTime}</p>
-        <p>Close: {status.closeTime}</p>
+        <p>Start of betting market: {status.startTime}</p>
+        <p>Close of betting market: {status.closeTime}</p>
       </div>
     </div>
   );
