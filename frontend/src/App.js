@@ -17,12 +17,12 @@ const readProvider = new ethers.providers.JsonRpcProvider(
   "http://127.0.0.1:8545"
 );
 
-const hookContractAddress = "0xE6Cf7dC07b8a9377Baa0604b025BA1273078C888";
-const swapRouterAddress = "0x4A679253410272dd5232B3Ff7cF5dbB88f295319";
-const usdcAddress = "0x7a2088a1bFc9d81c55368AE168C2C02570cB814F";
-const winAddress = "0xc5a5C42992dECbae36851359345FE25997F5C42d";
-const drawAddress = "0x84eA74d481Ee0A5332c457a4d796187F6Ba67fEB";
-const loseAddress = "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E";
+const hookContractAddress = "0x64e4560e31FD156d5903452b8fcbA0ef2c298888";
+const swapRouterAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
+const usdcAddress = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
+const winAddress = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707";
+const drawAddress = "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318";
+const loseAddress = "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853";
 
 function App() {
   const [walletAddress, setWalletAddress] = useState(null);
@@ -183,11 +183,11 @@ function App() {
       await signer.getAddress(),
       swapRouterAddress
     );
-    const amount = 100;
+    const amountInWei = ethers.utils.parseUnits(usdcAmount, 18); // In wei
 
-    if (allowance.gte(amount)) return console.log("Already approved");
+    if (allowance.gte(amountInWei)) return console.log("Already approved");
 
-    const tx = await usdcToken.approve(swapRouterAddress, amount);
+    const tx = await usdcToken.approve(swapRouterAddress, amountInWei);
     await tx.wait();
     console.log("Approved USDC for swapRouter");
   };
@@ -195,6 +195,9 @@ function App() {
   const handleBuy = async (outcome) => {
     alert(`You chose to buy ${usdcAmount} ${outcome} with USDC`);
     if (!signer) return alert("Please connect wallet first");
+
+    const amountInWei = ethers.utils.parseUnits(usdcAmount, 18); // In wei
+    // console.log("amountInWei: ", amountInWei);
 
     const swapRouter = getContract(swapRouterAddress, swapRouterABI);
     const userAddress = await signer.getAddress();
@@ -220,7 +223,7 @@ function App() {
 
     const swapParams = {
       zeroForOne: zeroForOneDummy,
-      amountSpecified: usdcAmount,
+      amountSpecified: amountInWei,
       sqrtPriceLimitX96: ethers.BigNumber.from("79228162514264337593543950336"),
     };
 
@@ -235,7 +238,13 @@ function App() {
     );
 
     const tx = await swapRouter.swap(poolKey, swapParams, settings, hookData);
+
+    // const tx = await swapRouter.swap(poolKey, swapParams, settings, hookData, {
+    //   gasLimit: ethers.BigNumber.from("1000000"), // or 500_000, depending on complexity
+    // });
+
     await tx.wait();
+
     console.log("✅ Swap successful!");
 
     await fetchBalances(userAddress);
