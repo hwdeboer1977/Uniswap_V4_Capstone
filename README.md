@@ -2,6 +2,19 @@
 
 ⚠️ Note: This implementation is not yet production-ready — oracle integration for automated match resolution is still in progress.
 
+## How to run?
+
+The smart contracts have been build with Foundry (WSL), the frontend with React, and backend with NodeJS
+
+Deploy smart contracts with Anvil:
+
+- Start Anvil in WSL: anvil --host 0.0.0.0
+- Run deploy script in Foundry with: forge script script/deploy.s.sol --rpc-url http://localhost:8545
+
+Start the frontend:
+
+- npm start
+
 ## Abstract
 
 This whitepaper introduces a decentralized sports betting mechanism integrated as a custom Uniswap V4 Hook, utilizing the Logarithmic Market Scoring Rule (LMSR) for dynamic probability-weighted pricing. The protocol enables users to bet on sports outcomes using USDC, routing liquidity into dedicated pools: USDC/HOME_WIN, USDC/HOME_LOSE, and USDC/HOME_DRAW.
