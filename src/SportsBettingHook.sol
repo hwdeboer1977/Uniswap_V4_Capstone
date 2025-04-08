@@ -27,7 +27,7 @@ contract SportsBettingHook is BaseHook, Ownable {
   
 
     uint256 public constant SCALE = 1e18; // fixed-point base (18 decimals)
-    uint256 public liquidityParameter = 500e18; // Liquidity parameter in LMSR
+    uint256 public constant LIQUIDITY_PARAMETER = 500e18; // Liquidity parameter in LMSR
 
     enum Outcome { HOME_WINS, HOME_DRAW, HOME_LOSE } // 3 match outcomes
 
@@ -125,8 +125,8 @@ contract SportsBettingHook is BaseHook, Ownable {
        
         // 4. q_i = b * (ln(p_i) - ln(p_win))
         int256 qWin = 0;
-        int256 qDraw = ((lnDraw - lnWin) * int256(liquidityParameter)) / int256(SCALE);
-        int256 qLose = ((lnLose - lnWin) * int256(liquidityParameter)) / int256(SCALE);
+        int256 qDraw = ((lnDraw - lnWin) * int256(LIQUIDITY_PARAMETER)) / int256(SCALE);
+        int256 qLose = ((lnLose - lnWin) * int256(LIQUIDITY_PARAMETER)) / int256(SCALE);
 
          // Get the lowest value (to rescale)
          int256 qLowest = min3(qWin, qDraw, qLose);   
@@ -489,16 +489,16 @@ contract SportsBettingHook is BaseHook, Ownable {
         uint256 lnExpSum = fixedX.ln().unwrap();
        
         // Return the market cost
-        return (liquidityParameter * lnExpSum) / 1e18; // Final scaling
+        return (LIQUIDITY_PARAMETER * lnExpSum) / 1e18; // Final scaling
         
     }
 
    // Scales input by liquidityParameter before computing exp()
-    function expScaled(uint256 x) public view returns (uint256) {
+    function expScaled(uint256 x) public pure returns (uint256) {
         //require(x <= 133e18, "Input too large for exp()");
         
         // Convert x to fixed-point (18 decimals)
-        UD60x18 fixedX = ud((x * 1e18) / liquidityParameter);  
+        UD60x18 fixedX = ud((x * 1e18) / LIQUIDITY_PARAMETER);  
         
         return fixedX.exp().unwrap(); // Compute e^x correctly
     }
