@@ -17,10 +17,12 @@ const readProvider = new ethers.providers.JsonRpcProvider(
   "http://127.0.0.1:8545"
 );
 
-const hookContractAddress = "0xE02479ee02740397137805b49Da5416E1c88C888";
-const swapRouterAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0";
-const usdcAddress = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
-const winAddress = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707";
+const hookContractAddress = "0xE6Cf7dC07b8a9377Baa0604b025BA1273078C888";
+const swapRouterAddress = "0x4A679253410272dd5232B3Ff7cF5dbB88f295319";
+const usdcAddress = "0x7a2088a1bFc9d81c55368AE168C2C02570cB814F";
+const winAddress = "0xc5a5C42992dECbae36851359345FE25997F5C42d";
+const drawAddress = "0x84eA74d481Ee0A5332c457a4d796187F6Ba67fEB";
+const loseAddress = "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E";
 
 function App() {
   const [walletAddress, setWalletAddress] = useState(null);
@@ -35,6 +37,9 @@ function App() {
     closeTime: "-",
   });
   const [winBalance, setWinBalance] = useState(null);
+  const [usdcBalance, setUsdcBalance] = useState(null);
+  const [drawBalance, setDrawBalance] = useState(null);
+  const [loseBalance, setLoseBalance] = useState(null);
 
   const erc20ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
@@ -60,6 +65,8 @@ function App() {
     const tokens = {
       usdc: usdcAddress,
       win: winAddress,
+      draw: drawAddress,
+      lose: loseAddress,
     };
 
     const balances = {};
@@ -69,9 +76,12 @@ function App() {
       balances[symbol] = ethers.utils.formatUnits(raw, 18); // assuming 18 decimals
     }
 
-    console.log("USDC:", balances.usdc);
-    console.log("WIN:", balances.win);
+    //console.log("USDC:", balances.usdc);
+    //console.log("WIN:", balances.win);
     setWinBalance(balances.win);
+    setUsdcBalance(balances.usdc);
+    setDrawBalance(balances.draw);
+    setLoseBalance(balances.lose);
   };
 
   const connectWallet = async () => {
@@ -183,7 +193,7 @@ function App() {
   };
 
   const handleBuy = async (outcome) => {
-    alert(`You chose to buy ${outcome} with ${usdcAmount} USDC`);
+    alert(`You chose to buy ${usdcAmount} ${outcome} with USDC`);
     if (!signer) return alert("Please connect wallet first");
 
     const swapRouter = getContract(swapRouterAddress, swapRouterABI);
@@ -210,7 +220,7 @@ function App() {
 
     const swapParams = {
       zeroForOne: zeroForOneDummy,
-      amountSpecified: 100,
+      amountSpecified: usdcAmount,
       sqrtPriceLimitX96: ethers.BigNumber.from("79228162514264337593543950336"),
     };
 
@@ -261,7 +271,7 @@ function App() {
     <div className="container">
       {/* Match + Odds */}
       <div className="card">
-        <h1 className="title">Dortmund vs Freiburg</h1>
+        <h1 className="title">Current Match: Dortmund vs Freiburg</h1>
         <div className="label">Odds:</div>
         <div className="odds">
           <div>
@@ -297,7 +307,7 @@ function App() {
 
           <input
             type="number"
-            placeholder="USDC amount"
+            placeholder="Number of WIN/DRAW/LOSE to buy"
             value={usdcAmount}
             onChange={(e) => setUsdcAmount(e.target.value)}
             className="input"
@@ -310,6 +320,10 @@ function App() {
           ) : (
             <div className="connected">
               {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+              <h4>Balance USDC: {usdcBalance} </h4>
+              <h4>Balance WIN Tokens: {winBalance} </h4>
+              <h4>Balance DRAW Tokens: {drawBalance} </h4>
+              <h4>Balance LOSE Tokens: {loseBalance} </h4>
             </div>
           )}
         </div>
